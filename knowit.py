@@ -8,15 +8,16 @@ import argparse
 from note import Note
 
 
-def gotovim(path, content):
+def vim(path, command):
     try:
-        cmd = ["nvim", path, "-c", f"normal i{content}"]
+        cmd = ["nvim", path, "-c", command]
         env = environ.copy()
         p = Popen(cmd,
                   stdin=stdin,
                   stdout=stdout,
                   env=env)
         output, errors = p.communicate()
+        return p.returncode
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
 
 def tags_selection_preview():
@@ -63,6 +64,7 @@ def fzf(options, preview_cb):
         fzf_options += "--bind 'ctrl-j:preview-down' "
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
+        fzf_options += "--bind 'esc:clear-query' "
         fzf_options += "--tiebreak=index "
         fzf_options += "--preview-window 'up,80%' "
         fzf_options += "--multi " # mutli selection of options
@@ -152,16 +154,58 @@ class Knowit():
         note_path = path.join(self.cwd, f"{i}.md")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         content = f"[{timestamp}]\n"
-        content += "="*80 + "\n"
+        content += "---" + "\n"
 
-        gotovim(note_path, content)
+        vim(note_path, f"normal i{content}")
 
     def vim_view(self, tags):
-        pass
+        lines = []
+        map = {}
+
+        prev_existed = False
+
+        #TODO: use creation time to control order?
+        for note in self.notes:
+            if not set(tags).issubset(set(note.tags)): continue
+            if prev_existed:
+                lines.extend(["\n",
+                              "---\n",
+                              "\n"])
+
+            # first line of note (for folding next)
+            map[note.path] = [len(lines) - (1 if prev_existed else 0)]
+            lines.extend(note.content.copy())
+            # last line of note (for folding next)
+            map[note.path].append(len(lines))
+            prev_existed = True
+
+        before_file_path = "/tmp/knowit_before.md"
+        after_file_path = "/tmp/knowit_after.md"
+
+        open(before_file_path, "w+").write("".join(lines))
+        open(after_file_path, "w+").write("".join(lines))
+
+        vim_script = "set foldmethod=manual\n\n"
+        for note_path in map:
+            start = map[note_path][0]
+            end = map[note_path][1]
+            print(f"start: {start}, end: {end}")
+            vim_script += f"execute \"normal! :{start},{end}fold\\<cr>\"\n"
+
+        vim_script_path = "/tmp/knowit.vim"
+        open(vim_script_path, "w+").write("".join(vim_script))
+
+        rc = vim(after_file_path, f":source {vim_script_path}")
+
+        # TODO: diff the changed file with the original and update notes!
+
+        remove(file_path)
+        remove(vim_script_path)
 
     def select(self):
         tags = self.get_tags()
         selected_tags = fzf(tags, tags_selection_preview)
+        if len(selected_tags) == 0: return
 
         # TODO: create vim view with folds and markdown
         print(f"selected_tags: {selected_tags}")
@@ -171,13 +215,15 @@ class Knowit():
         if len(self.args.tags) == 0: return
 
         content = ""
+        prev_existed = False
+        #TODO: use creation time to control order?
         for note in self.notes:
             if not set(self.args.tags).issubset(set(note.tags)): continue
+            if prev_existed: content += "\n---\n\n"
             content += ''.join(note.content)
-        if self.args.color:
-            content = bat(content)
-        else:
-            content = content.encode() # convert to bytes
+            prev_existed = True
+
+        content = bat(content) if self.args.color else content.encode()
         stdout.buffer.write(content)
 
 

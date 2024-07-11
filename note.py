@@ -20,7 +20,7 @@ class Note():
         to_dump = f"[{timestamp_str}]"
         for tag in self.tags: to_dump += f" #{tag}"
         to_dump += "\n"
-        to_dump += "="*80 + "\n"
+        to_dump += "---" + "\n"
         to_dump += "".join(self.content)
         open(self.path, 'w').write(to_dump)
 
@@ -36,7 +36,7 @@ class Note():
         tags = m.group('tags').strip().split('#')[1:]
         tags = [tag.strip() for tag in tags]
 
-        m = re.match(r"^={80}$", lines[1])
+        m = re.match(r"^---$", lines[1])
         assert m is not None
 
         content = lines[2:]
