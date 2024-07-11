@@ -1,7 +1,7 @@
 from subprocess import Popen, PIPE, DEVNULL
 from datetime import datetime
 from sys import stdin, stdout, stderr
-from os import walk, path, environ
+from os import walk, path, environ, remove
 import traceback
 import argparse
 
@@ -28,6 +28,7 @@ def tags_selection_preview():
     cmd = ["python3",
            "/home/s/github/knowit/knowit.py",
            "-a", "view",
+           "--color",
            "-t"]
     cmd.extend(tags)
     result = run(cmd, capture_output=True, text=True)
@@ -61,10 +62,8 @@ def fzf(options, preview_cb):
         fzf_options += "--bind 'ctrl-u:preview-up' "
         fzf_options += "--bind 'ctrl-d:preview-down' "
         fzf_options += "--tiebreak=index "
-        # fzf_options += "--preview-window '90%' "
         fzf_options += "--preview-window 'up,80%' "
         fzf_options += "--multi " # mutli selection of options
-        # fzf_options += "--preview 'python /tmp/preview.py {+} | bat -l md --style=full --color=always'"
         fzf_options += "--preview 'python /tmp/preview.py {+}'"
 
         env = environ.copy()
@@ -82,10 +81,12 @@ def fzf(options, preview_cb):
         results = output.decode('utf-8').strip()
         return results.splitlines()
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
+    finally:
+        remove("/tmp/preview.py")
 
 def bat(content):
     """
-    Calling bat for syntax highlighting
+    Calling 'bat' for syntax highlighting
     """
     try:
         env = environ.copy()
@@ -153,12 +154,16 @@ class Knowit():
 
         gotovim(note_path, content)
 
-    def select_tags(self):
+    def vim_view(self, tags):
+        pass
+
+    def select(self):
         tags = self.get_tags()
         selected_tags = fzf(tags, tags_selection_preview)
 
         # TODO: create vim view with folds and markdown
         print(f"selected_tags: {selected_tags}")
+        self.vim_view(selected_tags)
 
     def view(self):
         if len(self.args.tags) == 0: return
@@ -167,7 +172,11 @@ class Knowit():
         for note in self.notes:
             if not set(self.args.tags).issubset(set(note.tags)): continue
             content += ''.join(note.content)
-        stdout.buffer.write(bat(content))
+        if self.args.color:
+            content = bat(content)
+        else:
+            content = content.encode() # convert to bytes
+        stdout.buffer.write(content)
 
 
 def main():
@@ -185,6 +194,9 @@ def main():
                         nargs='+',
                         default=[],
                         help="list of tags to perform action on.")
+    parser.add_argument('--color',
+                        action="store_true",
+                        help="syntax highlight the results")
 
     args = parser.parse_args()
     knowit = Knowit(args)
@@ -192,7 +204,7 @@ def main():
     if args.action == "create":
         knowit.create_note()
     if args.action == "select":
-        knowit.select_tags()
+        knowit.select()
     if args.action == "view":
         knowit.view()
 
