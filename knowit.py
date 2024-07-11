@@ -59,8 +59,10 @@ def fzf(options, preview_cb):
         open("/tmp/preview.py", "w+").write(source)
 
         fzf_options = "--bind 'ctrl-z:toggle-preview' "
-        fzf_options += "--bind 'ctrl-u:preview-up' "
-        fzf_options += "--bind 'ctrl-d:preview-down' "
+        fzf_options += "--bind 'ctrl-k:preview-up' "
+        fzf_options += "--bind 'ctrl-j:preview-down' "
+        fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
+        fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
         fzf_options += "--tiebreak=index "
         fzf_options += "--preview-window 'up,80%' "
         fzf_options += "--multi " # mutli selection of options
