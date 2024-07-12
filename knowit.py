@@ -65,6 +65,8 @@ def fzf(options, preview_cb):
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
         fzf_options += "--bind 'esc:clear-query' "
+        fzf_options += "--bind 'tab:toggle' "
+        fzf_options += "--bind 'tab:+clear-query' "
         fzf_options += "--tiebreak=index "
         fzf_options += "--preview-window 'up,80%' "
         fzf_options += "--multi " # mutli selection of options
@@ -189,8 +191,10 @@ class Knowit():
         for note_path in map:
             start = map[note_path][0]
             end = map[note_path][1]
-            print(f"start: {start}, end: {end}")
+            # configure folds per note
             vim_script += f"execute \"normal! :{start},{end}fold\\<cr>\"\n"
+
+        vim_script += f"execute \"normal! zR\"\n" # open folds
 
         vim_script_path = "/tmp/knowit.vim"
         open(vim_script_path, "w+").write("".join(vim_script))
@@ -199,7 +203,8 @@ class Knowit():
 
         # TODO: diff the changed file with the original and update notes!
 
-        remove(file_path)
+        remove(before_file_path)
+        remove(after_file_path)
         remove(vim_script_path)
 
     def select(self):
@@ -208,8 +213,10 @@ class Knowit():
         if len(selected_tags) == 0: return
 
         # TODO: create vim view with folds and markdown
-        print(f"selected_tags: {selected_tags}")
         self.vim_view(selected_tags)
+
+    def grep(self):
+        pass
 
     def view(self):
         if len(self.args.tags) == 0: return
@@ -234,6 +241,7 @@ def main():
                         choices=[
                                     "create",
                                     "select",
+                                    "grep",
                                     "view",
                                 ],
                         help="the action to be perfomed")
@@ -255,9 +263,8 @@ def main():
         knowit.select()
     if args.action == "view":
         knowit.view()
-
-    # knowit.notes[0].dump()
-    # print(knowit.get_tags())
+    if args.action == "grep":
+        knowit.grep()
 
 if __name__=="__main__":
     try:
