@@ -20,22 +20,7 @@ def vim(path, command):
         return p.returncode
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
 
-def tags_selection_preview():
-    import sys
-    from subprocess import run
-    if len(sys.argv) < 2: return
-    tags = sys.argv[1:]
-
-    cmd = ["python3",
-           "/home/s/github/knowit/knowit.py",
-           "-a", "view",
-           "--color",
-           "-t"]
-    cmd.extend(tags)
-    result = run(cmd, capture_output=True, text=True)
-    print(result.stdout)
-
-def fzf(options, preview_cb):
+def fzf(options):
     import inspect
     """
     This is so cool, fzf print out to stderr the fuzzing options,
@@ -47,17 +32,6 @@ def fzf(options, preview_cb):
     NOTE: https://github.com/jpe90/clp is needed to be installed!
     """
     try:
-        source = inspect.getsource(preview_cb)
-        source += "\n"
-        source += "from inspect import getmembers, isfunction\n"
-        source += "from sys import modules\n"
-        source += "\n"
-        source += "for _,obj in getmembers(modules[__name__]):\n"
-        source += "    if not isfunction(obj): continue\n"
-        source += "    if not isfunction(obj): continue\n"
-        source += "    if 'preview' not in obj.__name__: continue\n"
-        source += "    obj()\n"
-        open("/tmp/preview.py", "w+").write(source)
 
         fzf_options = "--bind 'ctrl-z:toggle-preview' "
         fzf_options += "--bind 'ctrl-k:preview-up' "
@@ -70,7 +44,7 @@ def fzf(options, preview_cb):
         fzf_options += "--tiebreak=index "
         fzf_options += "--preview-window 'up,80%' "
         fzf_options += "--multi " # mutli selection of options
-        fzf_options += "--preview 'python /tmp/preview.py {+}'"
+        fzf_options += f"--preview 'python {path.abspath(__file__)} -a view --color -t {{+}}'"
 
         env = environ.copy()
         env["FZF_DEFAULT_OPTS"] = fzf_options
@@ -87,8 +61,6 @@ def fzf(options, preview_cb):
         results = output.decode('utf-8').strip()
         return results.splitlines()
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
-    finally:
-        remove("/tmp/preview.py")
 
 def bat(content):
     """
@@ -175,8 +147,9 @@ class Knowit():
                               "\n"])
 
             # first line of note (for folding next)
-            map[note.path] = [len(lines) - (1 if prev_existed else 0)]
-            lines.extend(note.content.copy())
+            map[note.path] = [len(lines) + 1 if prev_existed else 1]
+            note_content = open(note.path).readlines()
+            lines.extend(note_content.copy())
             # last line of note (for folding next)
             map[note.path].append(len(lines))
             prev_existed = True
@@ -188,6 +161,7 @@ class Knowit():
         open(after_file_path, "w+").write("".join(lines))
 
         vim_script = "set foldmethod=manual\n\n"
+        vim_script += f"execute \"normal! zE\"\n" # remove all folds
         for note_path in map:
             start = map[note_path][0]
             end = map[note_path][1]
@@ -209,7 +183,7 @@ class Knowit():
 
     def select(self):
         tags = self.get_tags()
-        selected_tags = fzf(tags, tags_selection_preview)
+        selected_tags = fzf(tags)
         if len(selected_tags) == 0: return
 
         # TODO: create vim view with folds and markdown
