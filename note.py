@@ -20,26 +20,28 @@ class Note():
         to_dump = f"[{timestamp_str}]"
         for tag in self.tags: to_dump += f" #{tag}"
         to_dump += "\n"
-        to_dump += "---" + "\n"
+        to_dump += "\n" + "---" + "\n"
         to_dump += "".join(self.content)
         open(self.path, 'w').write(to_dump)
 
     @staticmethod
     def parse(path):
         lines = open(path, 'r').readlines()
-        assert len(lines) > 2
+        assert len(lines) > 3
 
         m = re.match(r"^\[(?P<date>\d\d\d\d-\d\d\-\d\d\ \d\d:\d\d:\d\d)\]\s+(?P<tags>(\#\w+\s+)*)?$", lines[0])
         assert m is not None
+
+        assert len(lines[1]) == 1
 
         timestamp = datetime.strptime(m.group('date'), "%Y-%m-%d %H:%M:%S")
         tags = m.group('tags').strip().split('#')[1:]
         tags = [tag.strip() for tag in tags]
 
-        m = re.match(r"^---$", lines[1])
+        m = re.match(r"^---$", lines[2])
         assert m is not None
 
-        content = lines[2:]
+        content = lines[3:]
         links = []
         for line in content:
             m = re.match(r"^.*\[(?P<from>=>)?(?P<link>\w{10})(?P<to>=>)?\].*$", line)
