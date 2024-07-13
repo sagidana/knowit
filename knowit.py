@@ -51,7 +51,7 @@ def rg_fzf(locations=["~/notes"]):
     output, errors = p.communicate()
     return output.decode('utf-8').strip()
 
-def fzf(options, selected):
+def tag_fzf(options, selected):
     import inspect
     """
     This is so cool, fzf print out to stderr the fuzzing options,
@@ -73,6 +73,7 @@ def fzf(options, selected):
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
         fzf_options += "--bind 'esc:clear-query' "
+        fzf_options += f"--bind 'enter:execute(python {path.abspath(__file__)} -a view -t {{}})+abort' "
         # fzf_options += "--bind 'change:refresh-preview' "
         fzf_options += "--bind 'tab:toggle+clear-query' "
         fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
@@ -158,17 +159,17 @@ class Knowit():
         all_links = list(set(all_links))
         return all_links
 
-    def create_note(self):
+    def create(self):
         i = 0
         while path.exists(path.join(self.cwd, f"{i}.md")): i += 1
         note_path = path.join(self.cwd, f"{i}.md")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        content = f"[{timestamp}]\n"
+        content = f"[{timestamp}]\n\n"
         content += "---" + "\n"
 
         vim(note_path, f"normal i{content}")
 
-    def vim_view(self, tags):
+    def _view(self, tags):
         lines = []
         map = {}
 
@@ -177,9 +178,15 @@ class Knowit():
                 f"{' '.join(['#'+tag for tag in tags])}\n",
             ])
 
-        #TODO: use creation time to control order?
+        relevant_notes = []
         for note in self.notes:
             if not set(tags).issubset(set(note.tags)): continue
+            relevant_notes.append(note)
+
+        # order notes by time of creation
+        relevant_notes.sort(key=lambda x:x.timestamp)
+
+        for note in relevant_notes:
             lines.extend(["\n", "---\n"])
 
             map[note.path] = [len(lines) + 1]
@@ -206,7 +213,6 @@ class Knowit():
             end = map[note_path][1]
             # configure folds per note
             vim_script += f"execute \"normal! :{start},{end}fold\\<cr>\"\n"
-            print(f"execute \"normal! :{start},{end}fold\\<cr>\"\n")
 
         vim_script += f"execute \"normal! zR\"\n" # open folds
 
@@ -218,15 +224,36 @@ class Knowit():
         remove(file_path)
         remove(vim_script_path)
 
+    def view(self):
+        tags = self.args.tags
+        fzf_selected = ""
+        fzf_query = environ.get('FZF_QUERY', "")
+        fzf_label = environ.get('FZF_BORDER_LABEL', "")
+
+        # in case we in fzf context, initialize accordingly
+        if fzf_query or fzf_label:
+            assert len(tags) == 1
+            fzf_selected = tags[0]
+
+        if fzf_label:
+            tags = fzf_label.split('|')
+
+        if fzf_query:
+            tags.append(fzf_selected)
+        elif len(tags) == 0 and fzf_selected:
+            tags.append(fzf_selected)
+
+        tags = list(set(tags))
+        self._view(tags)
+
     def select(self):
         """view to search the notes using tags"""
         selected = self.args.tags
         tags = self.get_tags()
-        selected_tags = fzf(tags, selected=selected)
+        selected_tags = tag_fzf(tags, selected=selected)
         if len(selected_tags) == 0: return
 
-        # TODO: create vim view with folds and markdown
-        self.vim_view(selected_tags)
+        # self.view(selected_tags)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -246,12 +273,11 @@ class Knowit():
         file_line = result.split(":")[1]
         vim(file_path, file_line)
 
-
     def tag(self):
         """view to select tags for newly created note"""
         pass
 
-    def view_sync(self):
+    def sync(self):
         """
         sync the view file against the notes
         - if notes were changed inside the view - update the notes.
@@ -354,11 +380,12 @@ def main():
                         choices=[
                                     "create",
                                     "select",
+                                    "view",
                                     "tag",
                                     "grep",
+                                    "sync",
                                     "fzf_reload",
                                     "fzf_preview",
-                                    "view_sync",
                                 ],
                         help="the action to be perfomed")
     parser.add_argument('-t',
@@ -378,17 +405,19 @@ def main():
     knowit = Knowit(args)
 
     if args.action == "create":
-        knowit.create_note()
+        knowit.create()
     if args.action == "select":
         knowit.select()
+    if args.action == "view":
+        knowit.view()
     if args.action == "fzf_preview":
         knowit.fzf_preview()
     if args.action == "grep":
         knowit.grep()
     if args.action == "fzf_reload":
         knowit.fzf_reload()
-    if args.action == "view_sync":
-        knowit.view_sync()
+    if args.action == "sync":
+        knowit.sync()
     if args.action == "tag":
         knowit.tag()
 
