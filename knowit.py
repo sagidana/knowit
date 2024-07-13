@@ -26,7 +26,6 @@ def rg_fzf(locations=["~/notes"]):
     rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
     rg_suffix = f" {' '.join(locations)}"
 
-    open('/tmp/knowit.log', 'a+').write(f"rg_suffix: {rg_suffix}\n")
     initial_query = "\"\""
     cmd = ["fzf"]
     env = environ.copy()
@@ -69,7 +68,7 @@ def tag_fzf(options,
     fzf_options = "--listen 6266 "
     fzf_options += "--sync "
     fzf_options += "--border rounded "
-    fzf_options += f"--border-label \"{'|'.join(selected)}\" "
+    fzf_options += f"--border-label \"{' '.join(selected)}\" "
     fzf_options += "--bind 'ctrl-z:toggle-preview' "
     fzf_options += "--bind 'ctrl-k:preview-up' "
     fzf_options += "--bind 'ctrl-j:preview-down' "
@@ -191,7 +190,10 @@ class Knowit():
             selected = []
 
         if fzf_label:
-            selected = fzf_label.split('|')
+            selected = ''.join(fzf_label.split()) # remove all spaces
+            selected = selected.strip().split("#")
+            selected = [x for x in selected if x] # remove empty strings
+            fzf_selected = selected
 
         if fzf_query:
             selected.append(fzf_selected)
@@ -271,16 +273,23 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(tags) == 1
-            fzf_selected = tags[0]
+            tags = tags[0]
+            tags = ''.join(tags.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
+
+            fzf_selected = tags
             tags = []
 
         if fzf_label:
-            tags = fzf_label.split('|')
+            tags = ''.join(fzf_label.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
 
         if fzf_query:
-            tags.append(fzf_selected)
+            tags.extend(fzf_selected)
         elif len(tags) == 0 and fzf_selected:
-            tags.append(fzf_selected)
+            tags.extend(fzf_selected)
 
         tags = list(set(tags))
         self._view(tags)
@@ -311,7 +320,9 @@ class Knowit():
             tags = []
 
         if fzf_label:
-            tags = fzf_label.split('|')
+            tags = ''.join(fzf_label.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
 
         if fzf_query:
             tags.extend(fzf_selected)
@@ -333,7 +344,6 @@ class Knowit():
         """view to select tags for newly created note"""
         selected = self.args.tags
         tags = [f"#{tag}" for tag in self.get_tags()]
-        tags.insert(0, "#python #fzf") # adding to front
         on_enter = "echo $FZF_BORDER_LABEL"
         tag_fzf(tags, selected=selected, on_enter=on_enter)
 
@@ -363,7 +373,9 @@ class Knowit():
 
         tags = []
         if fzf_label:
-            tags = fzf_label.split('|')
+            tags = ''.join(fzf_label.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
 
         # toggle
         if len(selected) == 1:
@@ -384,7 +396,7 @@ class Knowit():
         for tag in relevant:
             print(f"#{tag}", flush=True)
 
-        fzf_label = "|".join(tags)
+        fzf_label = " ".join([f"#{tag}" for tag in tags])
 
         # we need to re-select the tags for fzf to continue from where we stopped
         post("http://localhost:6266/", data=f"change-border-label({fzf_label})")
@@ -402,11 +414,12 @@ class Knowit():
 
         tags = []
         if fzf_label:
-            tags = fzf_label.split('|')
+            tags = ''.join(fzf_label.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
 
         if not fzf_query or selected:
             tags.extend(selected)
-        open('/tmp/knowit.log', 'a+').write(f"tags: {tags}\n")
 
         content = ""
         prev_existed = False
