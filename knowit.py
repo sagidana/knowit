@@ -196,7 +196,7 @@ class Knowit():
             fzf_selected = selected
 
         if fzf_query:
-            selected.append(fzf_selected)
+            selected.extend(fzf_selected)
 
         tags = list(set(selected))
 
