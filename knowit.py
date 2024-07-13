@@ -62,40 +62,39 @@ def tag_fzf(options, selected):
     NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
     NOTE: https://github.com/jpe90/clp is needed to be installed!
     """
-    try:
-        fzf_options = "--listen 6266 "
-        fzf_options += "--sync "
-        fzf_options += "--border rounded "
-        fzf_options += f"--border-label \"{'|'.join(selected)}\" "
-        fzf_options += "--bind 'ctrl-z:toggle-preview' "
-        fzf_options += "--bind 'ctrl-k:preview-up' "
-        fzf_options += "--bind 'ctrl-j:preview-down' "
-        fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
-        fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-        fzf_options += "--bind 'esc:clear-query' "
-        fzf_options += f"--bind 'enter:execute(python {path.abspath(__file__)} -a view -t {{}})+abort' "
-        # fzf_options += "--bind 'change:refresh-preview' "
-        fzf_options += "--bind 'tab:toggle+clear-query' "
-        fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
-        fzf_options += "--tiebreak=index "
-        fzf_options += "--preview-window 'down,80%' "
-        fzf_options += f"--preview 'python {path.abspath(__file__)} -a fzf_preview --color -t {{}}'"
+    fzf_options = "--listen 6266 "
+    fzf_options += "--sync "
+    fzf_options += "--border rounded "
+    fzf_options += f"--border-label \"{'|'.join(selected)}\" "
+    fzf_options += "--bind 'ctrl-z:toggle-preview' "
+    fzf_options += "--bind 'ctrl-k:preview-up' "
+    fzf_options += "--bind 'ctrl-j:preview-down' "
+    fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
+    fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
+    fzf_options += f"--bind 'ctrl-g:execute(python {path.abspath(__file__)} -a grep -t {{}})+abort' "
+    fzf_options += "--bind 'esc:clear-query' "
+    fzf_options += f"--bind 'enter:execute(python {path.abspath(__file__)} -a view -t {{}})+abort' "
+    # fzf_options += "--bind 'change:refresh-preview' "
+    fzf_options += "--bind 'tab:toggle+clear-query' "
+    fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
+    fzf_options += "--tiebreak=index "
+    fzf_options += "--preview-window 'down,80%' "
+    fzf_options += f"--preview 'python {path.abspath(__file__)} -a fzf_preview --color -t {{}}'"
 
-        env = environ.copy()
-        env["FZF_DEFAULT_OPTS"] = fzf_options
-        p = Popen(["fzf"],
-                  stdin=PIPE,
-                  stdout=PIPE,
-                  stderr=stderr,
-                  env=env)
-        # write the options to stdin before launching the pocess with communicate()
-        p.stdin.write("\n".join(options).encode())
+    env = environ.copy()
+    env["FZF_DEFAULT_OPTS"] = fzf_options
+    p = Popen(["fzf"],
+              stdin=PIPE,
+              stdout=PIPE,
+              stderr=stderr,
+              env=env)
+    # write the options to stdin before launching the pocess with communicate()
+    p.stdin.write("\n".join(options).encode())
 
-        output, errors = p.communicate()
+    output, errors = p.communicate()
 
-        results = output.decode('utf-8').strip()
-        return results.splitlines()
-    except Exception as e: print(f"traceback: {traceback.format_exc()}")
+    results = output.decode('utf-8').strip()
+    return results.splitlines()
 
 def bat(content):
     """
@@ -225,6 +224,7 @@ class Knowit():
         remove(vim_script_path)
 
     def view(self):
+        """open view of relevant tags in vim"""
         tags = self.args.tags
         fzf_selected = ""
         fzf_query = environ.get('FZF_QUERY', "")
@@ -260,6 +260,23 @@ class Knowit():
 
         locations = []
         tags = self.args.tags
+        fzf_selected = ""
+        fzf_query = environ.get('FZF_QUERY', "")
+        fzf_label = environ.get('FZF_BORDER_LABEL', "")
+
+        # in case we in fzf context, initialize accordingly
+        if fzf_query or fzf_label:
+            assert len(tags) == 1
+            fzf_selected = tags[0]
+
+        if fzf_label:
+            tags = fzf_label.split('|')
+
+        if fzf_query:
+            tags.append(fzf_selected)
+        elif len(tags) == 0 and fzf_selected:
+            tags.append(fzf_selected)
+
         if not tags: locations.append("~/notes") # search all
         else:
             for note in self.notes:
