@@ -23,16 +23,18 @@ def vim(path, command=""):
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
 
 def rg_fzf(locations=["~/notes"]):
-    rg_prefix = "rg --column --line-number --no-heading --color=always --smart-case "
+    rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
     rg_suffix = f" {' '.join(locations)}"
+
+    open('/tmp/knowit.log', 'a+').write(f"rg_suffix: {rg_suffix}\n")
     initial_query = "\"\""
     cmd = ["fzf"]
     env = environ.copy()
     fzf_options = "--ansi "
     fzf_options += "--delimiter : "
     fzf_options += "--disabled "
-    fzf_options += f"--query \"{initial_query}\" "
-    fzf_options += f"--bind \"change:reload:sleep 0.1; {rg_prefix} {{q}} {rg_suffix} || true\" "
+    fzf_options += f"--query {initial_query} "
+    fzf_options += f"--bind \"change:reload:{rg_prefix} {{q}} {rg_suffix} || true\" "
     fzf_options += "--bind 'ctrl-k:preview-up' "
     fzf_options += "--bind 'ctrl-j:preview-down' "
     fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
@@ -126,6 +128,15 @@ class Knowit():
         self.notes = self.parse_notes()
         self.args = args
 
+        new_tags = []
+        # remove the '#' if exists
+        for tag in self.args.tags:
+            if tag.startswith("#"):
+                new_tags.append(tag[1:])
+            else:
+                new_tags.append(tag)
+        self.args.tags = new_tags
+
     def parse_notes(self):
         notes = []
         for root, dir, files in walk(self.cwd):
@@ -168,7 +179,7 @@ class Knowit():
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
         if not selected:
-            tags = self.get_tags()
+            tags = [f"#{tag}" for tag in self.get_tags()]
             tag_fzf(tags, selected=selected,
                     on_enter=f"python {path.abspath(__file__)} -a create -t {{}}")
             return
@@ -277,7 +288,7 @@ class Knowit():
     def search(self):
         """view to search the notes using tags"""
         selected = self.args.tags
-        tags = self.get_tags()
+        tags = [f"#{tag}" for tag in self.get_tags()]
         tag_fzf(tags, selected=selected)
 
     def grep(self):
@@ -292,14 +303,18 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(tags) == 1
-            fzf_selected = tags[0]
+            tags = tags[0]
+            tags = ''.join(tags.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
+            fzf_selected = tags
             tags = []
 
         if fzf_label:
             tags = fzf_label.split('|')
 
         if fzf_query:
-            tags.append(fzf_selected)
+            tags.extend(fzf_selected)
 
         if not tags: locations.append("~/notes") # search all
         else:
@@ -317,7 +332,8 @@ class Knowit():
     def tag(self):
         """view to select tags for newly created note"""
         selected = self.args.tags
-        tags = self.get_tags()
+        tags = [f"#{tag}" for tag in self.get_tags()]
+        tags.insert(0, "#python #fzf") # adding to front
         on_enter = "echo $FZF_BORDER_LABEL"
         tag_fzf(tags, selected=selected, on_enter=on_enter)
 
@@ -339,6 +355,9 @@ class Knowit():
         selected = self.args.tags
         assert len(selected) == 1
         selected = selected[0]
+        selected = ''.join(selected.split()) # remove all spaces
+        selected = selected.strip().split("#")
+        selected = [x for x in selected if x] # remove empty strings
         fzf_query = environ.get('FZF_QUERY', "")
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
@@ -347,10 +366,14 @@ class Knowit():
             tags = fzf_label.split('|')
 
         # toggle
-        if selected in tags:
-            tags.remove(selected)
-        elif selected != "":
-            tags.append(selected)
+        if len(selected) == 1:
+            if selected[0] in tags:
+                tags.remove(selected[0])
+            elif selected != "":
+                tags.append(selected[0])
+        else:
+            tags.extend(selected)
+        tags = list(set(tags))
 
         relevant = tags.copy()
         for note in self.notes:
@@ -358,7 +381,8 @@ class Knowit():
             relevant.extend(note.tags)
         relevant = list(set(relevant))
 
-        for tag in relevant: print(tag, flush=True)
+        for tag in relevant:
+            print(f"#{tag}", flush=True)
 
         fzf_label = "|".join(tags)
 
@@ -369,6 +393,10 @@ class Knowit():
         selected = self.args.tags
         assert len(selected) == 1
         selected = selected[0]
+        selected = ''.join(selected.split()) # remove all spaces
+        selected = selected.strip().split("#")
+        selected = [x for x in selected if x] # remove empty strings
+
         fzf_query = environ.get('FZF_QUERY', "")
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
@@ -377,7 +405,8 @@ class Knowit():
             tags = fzf_label.split('|')
 
         if not fzf_query or selected:
-            tags.append(selected)
+            tags.extend(selected)
+        open('/tmp/knowit.log', 'a+').write(f"tags: {tags}\n")
 
         content = ""
         prev_existed = False
@@ -390,8 +419,9 @@ class Knowit():
             relevant_tags.extend(note.tags)
         relevant_tags = list(set(relevant_tags))
 
-        open('/tmp/knowit.log', 'a+').write(f"tags: {tags}\n")
-        open('/tmp/knowit.log', 'a+').write(f"relevant_tags: {relevant_tags}\n")
+        # open('/tmp/knowit.log', 'a+').write(f"tags: {tags}\n")
+        # open('/tmp/knowit.log', 'a+').write(f"relevant_tags: {relevant_tags}\n")
+        # open('/tmp/knowit.log', 'a+').write(f"relevant_notes: {relevant_notes}\n")
 
         need_to_grep = True
         for tag in relevant_tags:
@@ -401,7 +431,6 @@ class Knowit():
 
         if need_to_grep:
             open('/tmp/knowit.log', 'a+').write(f"TODO: grepping...\n")
-            print("TODO: grepping...")
             return
 
         for note in relevant_notes:
