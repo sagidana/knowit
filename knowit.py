@@ -186,7 +186,12 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(selected) == 1
-            fzf_selected = selected[0]
+            selected = selected[0]
+            selected = ''.join(selected.split()) # remove all spaces
+            selected = selected.strip().split("#")
+            selected = [x for x in selected if x] # remove empty strings
+
+            fzf_selected = selected
             selected = []
 
         if fzf_label:
