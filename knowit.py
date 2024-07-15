@@ -1,5 +1,5 @@
 from subprocess import Popen, PIPE, DEVNULL
-from os import walk, path, environ, remove
+from os import walk, path, environ, remove, isatty, ctermid
 from sys import stdin, stdout, stderr
 from datetime import datetime
 from requests import post
@@ -15,10 +15,13 @@ def vim(path, command=""):
     try:
         cmd = ["nvim", path, "-c", command]
         env = environ.copy()
+
         p = Popen(cmd,
-                  stdin=stdin,
-                  stdout=stdout,
+                  stdin=open(ctermid(), 'rb'), # fzf lost stdout/stdin so we retrieve them
+                  stdout=open(ctermid(), 'w'), # fzf lost stdout/stdin so we retrieve them
+                  stderr=open(ctermid(), 'w'),
                   env=env)
+
         output, errors = p.communicate()
         return p.returncode
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
@@ -83,9 +86,9 @@ def tag_fzf(tags,
     fzf_options += "--bind 'ctrl-j:preview-down' "
     fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
     fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-    fzf_options += f"--bind 'ctrl-g:execute(python {path.abspath(__file__)} -a grep -t {{}})+abort' "
+    fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} -a grep -t {{}})' "
     fzf_options += "--bind 'esc:clear-query' "
-    fzf_options += f"--bind 'enter:execute({on_enter})+abort' "
+    fzf_options += f"--bind 'enter:become({on_enter})' "
     fzf_options += "--bind 'tab:toggle+clear-query' "
     fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
     fzf_options += "--tiebreak=index "
@@ -402,9 +405,6 @@ class Knowit():
 
         for tag, count in reversed(sorted(tags_map.items(), key=lambda x: x[1])):
             print(f"#{tag} [{count}]", flush=True)
-
-        # for tag in relevant:
-            # print(f"#{tag} [{tags_map[tag]}]", flush=True)
 
         fzf_label = " ".join([f"#{tag}" for tag in tags])
 
