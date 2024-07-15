@@ -14,17 +14,29 @@ from note import Note
 def vim(path, command=""):
     try:
         cmd = ["nvim", path, "-c", command]
+
+        # fzf lost stdout/stdin so we retrieve them
+        _stdin = open(ctermid(), 'rb')
+        _stdout = open(ctermid(), 'w')
+
         env = environ.copy()
+        # fzf keeps some of its environment variables, remove them to keep
+        # clean operation
+        if "FZF_DEFAULT_COMMAND" in env: del env["FZF_DEFAULT_COMMAND"]
+        if "INITIAL_QUERY" in env: del env["INITIAL_QUERY"]
+        if "FZF_DEFAULT_OPTS" in env: del env["FZF_DEFAULT_OPTS"]
 
         p = Popen(cmd,
-                  stdin=open(ctermid(), 'rb'), # fzf lost stdout/stdin so we retrieve them
-                  stdout=open(ctermid(), 'w'), # fzf lost stdout/stdin so we retrieve them
-                  stderr=open(ctermid(), 'w'),
+                  stdin=_stdin,
+                  stdout=_stdout,
+                  stderr=_stdout,
                   env=env)
 
         output, errors = p.communicate()
         return p.returncode
-    except Exception as e: print(f"traceback: {traceback.format_exc()}")
+    except Exception as e:
+        open('/tmp/knowit.log', 'a+').write(f"traceback: {traceback.format_exc()}")
+        # print(f"traceback: {traceback.format_exc()}")
 
 def rg_fzf(locations=["~/notes"]):
     rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
