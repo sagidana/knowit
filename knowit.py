@@ -454,10 +454,7 @@ class Knowit():
         for note in relevant_notes:
             if prev_existed: content += "\n---\n\n"
 
-            if len(note.content) > 4:
-                content += ''.join(note.content[:4])
-            else:
-                content += ''.join(note.content)
+            content += ''.join(note.content)
             prev_existed = True
 
         content = bat(content) if self.args.color else content.encode()
