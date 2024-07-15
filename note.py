@@ -15,14 +15,17 @@ class Note():
         self.links = links
         self.content = content
 
-    def dump(self):
+    def __str__(self):
         timestamp_str = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        to_dump = f"[{timestamp_str}]"
-        for tag in self.tags: to_dump += f" #{tag}"
-        to_dump += "\n"
-        to_dump += "\n" + "---" + "\n"
-        to_dump += "".join(self.content)
-        open(self.path, 'w').write(to_dump)
+        to_str = f"[{timestamp_str}]"
+        for tag in self.tags: to_str += f" #{tag}"
+        to_str += "\n"
+        to_str += "\n" + "---" + "\n"
+        to_str += "".join(self.content)
+        return to_str
+
+    def dump(self):
+        open(self.path, 'w').write(str(self))
 
     @staticmethod
     def parse(path):

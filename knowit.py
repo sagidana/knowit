@@ -6,6 +6,7 @@ from requests import post
 from time import sleep
 import traceback
 import argparse
+import re
 
 from note import Note
 
@@ -52,10 +53,9 @@ def rg_fzf(locations=["~/notes"]):
     output, errors = p.communicate()
     return output.decode('utf-8').strip()
 
-def tag_fzf(options,
+def tag_fzf(tags,
             selected,
             on_enter=f"python {path.abspath(__file__)} -a view -t {{}}"):
-    import inspect
     """
     This is so cool, fzf print out to stderr the fuzzing options,
     and only the chosen result spit to the stdout.. this enables scripts like
@@ -65,9 +65,18 @@ def tag_fzf(options,
     NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
     NOTE: https://github.com/jpe90/clp is needed to be installed!
     """
+
+    _tags = []
+    for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
+        _tags.append(f"#{tag} [{count}]")
+    tags = _tags
+
     fzf_options = "--listen 6266 "
     fzf_options += "--sync "
+    fzf_options += "--nth ..-2 "
+    fzf_options += "--layout reverse "
     fzf_options += "--border rounded "
+    fzf_options += "--border-label-pos 3 "
     fzf_options += f"--border-label \"{' '.join(selected)}\" "
     fzf_options += "--bind 'ctrl-z:toggle-preview' "
     fzf_options += "--bind 'ctrl-k:preview-up' "
@@ -77,7 +86,6 @@ def tag_fzf(options,
     fzf_options += f"--bind 'ctrl-g:execute(python {path.abspath(__file__)} -a grep -t {{}})+abort' "
     fzf_options += "--bind 'esc:clear-query' "
     fzf_options += f"--bind 'enter:execute({on_enter})+abort' "
-    # fzf_options += "--bind 'change:refresh-preview' "
     fzf_options += "--bind 'tab:toggle+clear-query' "
     fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
     fzf_options += "--tiebreak=index "
@@ -92,7 +100,7 @@ def tag_fzf(options,
               stderr=stderr,
               env=env)
     # write the options to stdin before launching the pocess with communicate()
-    p.stdin.write("\n".join(options).encode())
+    p.stdin.write("\n".join(tags).encode())
 
     output, errors = p.communicate()
     results = output.decode('utf-8').strip()
@@ -150,12 +158,12 @@ class Knowit():
         return notes
 
     def get_tags(self):
-        all_tags = []
+        all_tags = {}
 
-        [all_tags.extend(note.tags) for note in self.notes]
-
-        all_tags = list(set(all_tags))
-
+        for note in self.notes:
+            for tag in note.tags:
+                if tag not in all_tags: all_tags[tag] = 0
+                all_tags[tag] += 1
         return all_tags
 
     def get_links(self):
@@ -178,20 +186,14 @@ class Knowit():
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
         if not selected:
-            tags = [f"#{tag}" for tag in self.get_tags()]
-            tag_fzf(tags, selected=selected,
+            tag_fzf(self.get_tags(), selected=selected,
                     on_enter=f"python {path.abspath(__file__)} -a create -t {{}}")
             return
 
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(selected) == 1
-            selected = selected[0]
-            selected = ''.join(selected.split()) # remove all spaces
-            selected = selected.strip().split("#")
-            selected = [x for x in selected if x] # remove empty strings
-
-            fzf_selected = selected
+            fzf_selected = self.fzf_selected_parse(selected[0])
             selected = []
 
         if fzf_label:
@@ -278,12 +280,7 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(tags) == 1
-            tags = tags[0]
-            tags = ''.join(tags.split()) # remove all spaces
-            tags = tags.strip().split("#")
-            tags = [x for x in tags if x] # remove empty strings
-
-            fzf_selected = tags
+            fzf_selected = self.fzf_selected_parse(tags[0])
             tags = []
 
         if fzf_label:
@@ -302,8 +299,9 @@ class Knowit():
     def search(self):
         """view to search the notes using tags"""
         selected = self.args.tags
-        tags = [f"#{tag}" for tag in self.get_tags()]
-        tag_fzf(tags, selected=selected)
+        all_tags = self.get_tags()
+
+        tag_fzf(self.get_tags(), selected=selected)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -317,11 +315,7 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             assert len(tags) == 1
-            tags = tags[0]
-            tags = ''.join(tags.split()) # remove all spaces
-            tags = tags.strip().split("#")
-            tags = [x for x in tags if x] # remove empty strings
-            fzf_selected = tags
+            fzf_selected = self.fzf_selected_parse(tags[0])
             tags = []
 
         if fzf_label:
@@ -348,9 +342,8 @@ class Knowit():
     def tag(self):
         """view to select tags for newly created note"""
         selected = self.args.tags
-        tags = [f"#{tag}" for tag in self.get_tags()]
         on_enter = "echo $FZF_BORDER_LABEL"
-        tag_fzf(tags, selected=selected, on_enter=on_enter)
+        tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
 
     def sync(self):
         """
@@ -366,13 +359,17 @@ class Knowit():
             return
         pass
 
-    def fzf_reload(self):
-        selected = self.args.tags
-        assert len(selected) == 1
-        selected = selected[0]
+    def fzf_selected_parse(self, selected):
+        selected = re.sub(r"\[.*$", "", selected) # remove the count ]
         selected = ''.join(selected.split()) # remove all spaces
         selected = selected.strip().split("#")
         selected = [x for x in selected if x] # remove empty strings
+        return selected
+
+    def fzf_reload(self):
+        selected = self.args.tags
+        assert len(selected) == 1
+        selected = self.fzf_selected_parse(selected[0])
         fzf_query = environ.get('FZF_QUERY', "")
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
@@ -393,13 +390,21 @@ class Knowit():
         tags = list(set(tags))
 
         relevant = tags.copy()
+        tags_map = {}
         for note in self.notes:
             if not set(tags).issubset(set(note.tags)): continue
             relevant.extend(note.tags)
+            relevant = list(set(relevant)) # remove dups
+            for tag in note.tags:
+                if tag not in tags_map: tags_map[tag] = 0
+                tags_map[tag] += 1
         relevant = list(set(relevant))
 
-        for tag in relevant:
-            print(f"#{tag}", flush=True)
+        for tag, count in reversed(sorted(tags_map.items(), key=lambda x: x[1])):
+            print(f"#{tag} [{count}]", flush=True)
+
+        # for tag in relevant:
+            # print(f"#{tag} [{tags_map[tag]}]", flush=True)
 
         fzf_label = " ".join([f"#{tag}" for tag in tags])
 
@@ -409,10 +414,7 @@ class Knowit():
     def fzf_preview(self):
         selected = self.args.tags
         assert len(selected) == 1
-        selected = selected[0]
-        selected = ''.join(selected.split()) # remove all spaces
-        selected = selected.strip().split("#")
-        selected = [x for x in selected if x] # remove empty strings
+        selected = self.fzf_selected_parse(selected[0])
 
         fzf_query = environ.get('FZF_QUERY', "")
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
@@ -437,24 +439,11 @@ class Knowit():
             relevant_tags.extend(note.tags)
         relevant_tags = list(set(relevant_tags))
 
-        # open('/tmp/knowit.log', 'a+').write(f"tags: {tags}\n")
-        # open('/tmp/knowit.log', 'a+').write(f"relevant_tags: {relevant_tags}\n")
-        # open('/tmp/knowit.log', 'a+').write(f"relevant_notes: {relevant_notes}\n")
-
-        need_to_grep = True
-        for tag in relevant_tags:
-            if fzf_query in tag:
-                need_to_grep = False
-                break
-
-        if need_to_grep:
-            open('/tmp/knowit.log', 'a+').write(f"TODO: grepping...\n")
-            return
-
         for note in relevant_notes:
             if prev_existed: content += "\n---\n\n"
 
-            content += ''.join(note.content)
+            # content += ''.join(note.content)
+            content += str(note)
             prev_existed = True
 
         content = bat(content) if self.args.color else content.encode()
