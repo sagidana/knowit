@@ -93,7 +93,6 @@ def tag_fzf(tags,
 
     fzf_options = "--listen 6266 "
     fzf_options += "--sync "
-    fzf_options += "--nth ..-2 "
     fzf_options += "--layout reverse "
     fzf_options += "--border rounded "
     fzf_options += "--border-label-pos 3 "
