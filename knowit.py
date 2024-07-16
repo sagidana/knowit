@@ -10,10 +10,15 @@ import re
 
 from note import Note
 
+def log(message):
+    with open('/tmp/knowit.log', 'a+') as f:
+        f.write(f"{message}\n")
 
-def vim(path, command=""):
+def vim(path, commands=[]):
     try:
-        cmd = ["nvim", path, "-c", command]
+        cmd = ["nvim", path]
+        for command in commands:
+            cmd.extend(["-c", command])
 
         # fzf lost stdout/stdin so we retrieve them
         _stdin = open(ctermid(), 'rb')
@@ -94,6 +99,7 @@ def tag_fzf(tags,
     fzf_options += "--border-label-pos 3 "
     fzf_options += f"--border-label \"{' '.join(selected)}\" "
     fzf_options += "--bind 'ctrl-z:toggle-preview' "
+    fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} -a create -t {{}})' "
     fzf_options += "--bind 'ctrl-k:preview-up' "
     fzf_options += "--bind 'ctrl-j:preview-down' "
     fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
@@ -228,16 +234,15 @@ class Knowit():
         content = f"[{timestamp}]{''.join([' #'+tag for tag in tags])}\n\n"
         content += "---" + "\n"
 
-        vim(note_path, f"normal i{content}")
+        vim(note_path, [f"normal i{content}"])
 
     def _view(self, tags):
         lines = []
         map = {}
 
         prev_existed = False
-        lines.extend([
-                f"{' '.join(['#'+tag for tag in tags])}\n",
-            ])
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines.append(f"[{timestamp}]{''.join([' #'+tag for tag in tags])}\n")
 
         relevant_notes = []
         for note in self.notes:
@@ -246,6 +251,11 @@ class Knowit():
 
         # order notes by time of creation
         relevant_notes.sort(key=lambda x:x.timestamp)
+
+        # if one note, open directly.
+        if len(relevant_notes) == 1:
+            vim(relevant_notes[0].path)
+            return
 
         for note in relevant_notes:
             lines.extend(["\n", "---\n"])
@@ -264,10 +274,12 @@ class Knowit():
             map[note.path].append(len(lines))
             prev_existed = True
 
-        file_path = "/tmp/knowit.md"
-        open(file_path, "w+").write("".join(lines))
+        i = 0
+        while path.exists(path.join(self.cwd, f"{i}.md")): i += 1
+        file_path = path.join(self.cwd, f"{i}.md")
 
-        vim_script = "set foldmethod=manual\n\n"
+        vim_script = f"set nopaste\n" # undo the set paste done at the begining
+        vim_script += "set foldmethod=manual\n\n"
         vim_script += f"execute \"normal! zE\"\n" # remove all folds
         for note_path in map:
             start = map[note_path][0]
@@ -276,13 +288,15 @@ class Knowit():
             vim_script += f"execute \"normal! :{start},{end}fold\\<cr>\"\n"
 
         vim_script += f"execute \"normal! zR\"\n" # open folds
+        vim_script += f"execute \"normal! gg\"\n" # move cursor to begining
 
         vim_script_path = "/tmp/knowit.vim"
         open(vim_script_path, "w+").write("".join(vim_script))
 
-        rc = vim(file_path, f":source {vim_script_path}")
+        rc = vim(file_path, ["set paste",
+                             f"normal i{''.join(lines)}",
+                             f":source {vim_script_path}"])
 
-        remove(file_path)
         remove(vim_script_path)
 
     def view(self):
@@ -352,7 +366,7 @@ class Knowit():
 
         file_path = result.split(":")[0]
         file_line = result.split(":")[1]
-        vim(file_path, file_line)
+        vim(file_path, [file_line])
 
     def tag(self):
         """view to select tags for newly created note"""
@@ -515,4 +529,4 @@ if __name__=="__main__":
     try:
         main()
     except:
-        print(traceback.format_exc())
+        log(traceback.format_exc())
