@@ -236,7 +236,30 @@ class Knowit():
 
         vim(note_path, [f"normal i{content}"])
 
-    def _view(self, tags):
+    def view(self):
+        """open view of relevant tags in vim"""
+        tags = self.args.tags
+        fzf_selected = ""
+        fzf_query = environ.get('FZF_QUERY', "")
+        fzf_label = environ.get('FZF_BORDER_LABEL', "")
+
+        # in case we in fzf context, initialize accordingly
+        if "FZF_QUERY" in environ:
+            assert len(tags) == 1
+            fzf_selected = self.fzf_selected_parse(tags[0])
+            tags = []
+
+        if fzf_label:
+            tags = ''.join(fzf_label.split()) # remove all spaces
+            tags = tags.strip().split("#")
+            tags = [x for x in tags if x] # remove empty strings
+
+        if fzf_query:
+            tags.extend(fzf_selected)
+        elif len(tags) == 0 and fzf_selected:
+            tags.extend(fzf_selected)
+
+        tags = list(set(tags))
         lines = []
         map = {}
 
@@ -299,33 +322,14 @@ class Knowit():
 
         remove(vim_script_path)
 
-    def view(self):
-        """open view of relevant tags in vim"""
-        tags = self.args.tags
-        fzf_selected = ""
-        fzf_query = environ.get('FZF_QUERY', "")
-        fzf_label = environ.get('FZF_BORDER_LABEL', "")
-
-        # in case we in fzf context, initialize accordingly
-        if "FZF_QUERY" in environ:
-            assert len(tags) == 1
-            fzf_selected = self.fzf_selected_parse(tags[0])
-            tags = []
-
-        if fzf_label:
-            tags = ''.join(fzf_label.split()) # remove all spaces
-            tags = tags.strip().split("#")
-            tags = [x for x in tags if x] # remove empty strings
-
-        if fzf_query:
-            tags.extend(fzf_selected)
-        elif len(tags) == 0 and fzf_selected:
-            tags.extend(fzf_selected)
-
-        tags = list(set(tags))
-        self._view(tags)
-
     def search(self):
+        """view to search the notes using tags"""
+        selected = self.args.tags
+        all_tags = self.get_tags()
+
+        tag_fzf(self.get_tags(), selected=selected)
+
+    def select(self):
         """view to search the notes using tags"""
         selected = self.args.tags
         all_tags = self.get_tags()
