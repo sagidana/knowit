@@ -108,6 +108,61 @@ def tag_fzf(tags,
     fzf_options += "--bind 'esc:clear-query' "
     fzf_options += f"--bind 'enter:become({on_enter})' "
     fzf_options += "--bind 'tab:toggle+clear-query' "
+    fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a tag_fzf_reload -t {{}})' "
+    fzf_options += "--tiebreak=index "
+    fzf_options += "--preview-window 'down,80%' "
+    fzf_options += f"--preview 'python {path.abspath(__file__)} -a tag_fzf_preview --color -t {{}}'"
+
+    env = environ.copy()
+    env["FZF_DEFAULT_OPTS"] = fzf_options
+    p = Popen(["fzf"],
+              stdin=PIPE,
+              stdout=PIPE,
+              stderr=stderr,
+              env=env)
+    # write the options to stdin before launching the pocess with communicate()
+    p.stdin.write("\n".join(tags).encode())
+
+    output, errors = p.communicate()
+    results = output.decode('utf-8').strip()
+
+    return results.splitlines()
+
+def note_fzf(tags,
+            selected,
+            on_enter=f"python {path.abspath(__file__)} -a view -t {{}}"):
+    """
+    This is so cool, fzf print out to stderr the fuzzing options,
+    and only the chosen result spit to the stdout.. this enables scripts like
+    this to work out of the box, no redirection of the stderr is need - and
+    only the result is redirected to our pipe (which contain the result)
+    FZF - good job :)
+    NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
+    NOTE: https://github.com/jpe90/clp is needed to be installed!
+    """
+
+    _tags = []
+    for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
+        _tags.append(f"#{tag} [{count}]")
+    tags = _tags
+
+    fzf_options = "--listen 6266 "
+    fzf_options += "--sync "
+    fzf_options += "--nth ..-2 "
+    fzf_options += "--layout reverse "
+    fzf_options += "--border rounded "
+    fzf_options += "--border-label-pos 3 "
+    fzf_options += f"--border-label \"{' '.join(selected)}\" "
+    fzf_options += "--bind 'ctrl-z:toggle-preview' "
+    fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} -a create -t {{}})' "
+    fzf_options += "--bind 'ctrl-k:preview-up' "
+    fzf_options += "--bind 'ctrl-j:preview-down' "
+    fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
+    fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
+    fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} -a grep -t {{}})' "
+    fzf_options += "--bind 'esc:clear-query' "
+    fzf_options += f"--bind 'enter:become({on_enter})' "
+    fzf_options += "--bind 'tab:toggle+clear-query' "
     fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
     fzf_options += "--tiebreak=index "
     fzf_options += "--preview-window 'down,80%' "
@@ -322,19 +377,22 @@ class Knowit():
 
         remove(vim_script_path)
 
-    def search(self):
-        """view to search the notes using tags"""
+    def browse(self):
+        """view to browse the notes using tags"""
         selected = self.args.tags
         all_tags = self.get_tags()
 
         tag_fzf(self.get_tags(), selected=selected)
 
     def select(self):
-        """view to search the notes using tags"""
+        """
+        view select specific note
+        - for external usages like linking and embedding notes.
+        """
         selected = self.args.tags
         all_tags = self.get_tags()
 
-        tag_fzf(self.get_tags(), selected=selected)
+        note_fzf(self.get_tags(), selected=selected)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -399,7 +457,7 @@ class Knowit():
         selected = [x for x in selected if x] # remove empty strings
         return selected
 
-    def fzf_reload(self):
+    def tag_fzf_reload(self):
         selected = self.args.tags
         assert len(selected) == 1
         selected = self.fzf_selected_parse(selected[0])
@@ -441,7 +499,7 @@ class Knowit():
         # we need to re-select the tags for fzf to continue from where we stopped
         post("http://localhost:6266/", data=f"change-border-label({fzf_label})")
 
-    def fzf_preview(self):
+    def tag_fzf_preview(self):
         selected = self.args.tags
         assert len(selected) == 1
         selected = self.fzf_selected_parse(selected[0])
@@ -486,13 +544,13 @@ def main():
                         '--action',
                         choices=[
                                     "create",
-                                    "search",
+                                    "browse",
                                     "view",
                                     "tag",
                                     "grep",
                                     "sync",
-                                    "fzf_reload",
-                                    "fzf_preview",
+                                    "tag_fzf_reload",
+                                    "tag_fzf_preview",
                                 ],
                         help="the action to be perfomed")
     parser.add_argument('-t',
@@ -513,8 +571,8 @@ def main():
 
     if args.action == "create":
         knowit.create()
-    if args.action == "search":
-        knowit.search()
+    if args.action == "browse":
+        knowit.browse()
     if args.action == "view":
         knowit.view()
     if args.action == "grep":
@@ -523,10 +581,10 @@ def main():
         knowit.sync()
     if args.action == "tag":
         knowit.tag()
-    if args.action == "fzf_preview":
-        knowit.fzf_preview()
-    if args.action == "fzf_reload":
-        knowit.fzf_reload()
+    if args.action == "tag_fzf_preview":
+        knowit.tag_fzf_preview()
+    if args.action == "tag_fzf_reload":
+        knowit.tag_fzf_reload()
 
 
 if __name__=="__main__":
