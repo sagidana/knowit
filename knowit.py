@@ -105,62 +105,7 @@ def tag_fzf(tags,
     fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
     fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
     fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} -a grep -t {{}})' "
-    fzf_options += "--bind 'esc:clear-query' "
-    fzf_options += f"--bind 'enter:become({on_enter})' "
-    fzf_options += "--bind 'tab:toggle+clear-query' "
-    fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a tag_fzf_reload -t {{}})' "
-    fzf_options += "--tiebreak=index "
-    fzf_options += "--preview-window 'down,80%' "
-    fzf_options += f"--preview 'python {path.abspath(__file__)} -a tag_fzf_preview --color -t {{}}'"
-
-    env = environ.copy()
-    env["FZF_DEFAULT_OPTS"] = fzf_options
-    p = Popen(["fzf"],
-              stdin=PIPE,
-              stdout=PIPE,
-              stderr=stderr,
-              env=env)
-    # write the options to stdin before launching the pocess with communicate()
-    p.stdin.write("\n".join(tags).encode())
-
-    output, errors = p.communicate()
-    results = output.decode('utf-8').strip()
-
-    return results.splitlines()
-
-def note_fzf(tags,
-            selected,
-            on_enter=f"python {path.abspath(__file__)} -a view -t {{}}"):
-    """
-    This is so cool, fzf print out to stderr the fuzzing options,
-    and only the chosen result spit to the stdout.. this enables scripts like
-    this to work out of the box, no redirection of the stderr is need - and
-    only the result is redirected to our pipe (which contain the result)
-    FZF - good job :)
-    NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
-    NOTE: https://github.com/jpe90/clp is needed to be installed!
-    """
-
-    _tags = []
-    for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
-        _tags.append(f"#{tag} [{count}]")
-    tags = _tags
-
-    fzf_options = "--listen 6266 "
-    fzf_options += "--sync "
-    fzf_options += "--nth ..-2 "
-    fzf_options += "--layout reverse "
-    fzf_options += "--border rounded "
-    fzf_options += "--border-label-pos 3 "
-    fzf_options += f"--border-label \"{' '.join(selected)}\" "
-    fzf_options += "--bind 'ctrl-z:toggle-preview' "
-    fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} -a create -t {{}})' "
-    fzf_options += "--bind 'ctrl-k:preview-up' "
-    fzf_options += "--bind 'ctrl-j:preview-down' "
-    fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
-    fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-    fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} -a grep -t {{}})' "
-    fzf_options += "--bind 'esc:clear-query' "
+    fzf_options += f"--bind 'esc:reload(python {path.abspath(__file__)} -a fzf_reload --undo -t {{}})+clear-query' "
     fzf_options += f"--bind 'enter:become({on_enter})' "
     fzf_options += "--bind 'tab:toggle+clear-query' "
     fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
@@ -260,11 +205,6 @@ class Knowit():
         fzf_selected = ""
         fzf_query = environ.get('FZF_QUERY', "")
         fzf_label = environ.get('FZF_BORDER_LABEL', "")
-
-        if not selected:
-            tag_fzf(self.get_tags(), selected=selected,
-                    on_enter=f"python {path.abspath(__file__)} -a create -t {{}}")
-            return
 
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
@@ -384,16 +324,6 @@ class Knowit():
 
         tag_fzf(self.get_tags(), selected=selected)
 
-    def select(self):
-        """
-        view select specific note
-        - for external usages like linking and embedding notes.
-        """
-        selected = self.args.tags
-        all_tags = self.get_tags()
-
-        note_fzf(self.get_tags(), selected=selected)
-
     def grep(self):
         """view to search the notes using grep"""
 
@@ -457,7 +387,7 @@ class Knowit():
         selected = [x for x in selected if x] # remove empty strings
         return selected
 
-    def tag_fzf_reload(self):
+    def fzf_reload(self):
         selected = self.args.tags
         assert len(selected) == 1
         selected = self.fzf_selected_parse(selected[0])
@@ -470,15 +400,19 @@ class Knowit():
             tags = tags.strip().split("#")
             tags = [x for x in tags if x] # remove empty strings
 
-        # toggle
-        if len(selected) == 1:
-            if selected[0] in tags:
-                tags.remove(selected[0])
-            elif selected != "":
-                tags.append(selected[0])
+        if self.args.undo:
+            if len(tags) > 0:
+                tags.pop()
         else:
-            tags.extend(selected)
-        tags = list(set(tags))
+            # toggle
+            if len(selected) == 1:
+                if selected[0] in tags:
+                    tags.remove(selected[0])
+                elif selected != "":
+                    tags.append(selected[0])
+            else:
+                tags.extend(selected)
+        tags = list(dict.fromkeys(tags)) # preserve order!
 
         relevant = tags.copy()
         tags_map = {}
@@ -499,7 +433,7 @@ class Knowit():
         # we need to re-select the tags for fzf to continue from where we stopped
         post("http://localhost:6266/", data=f"change-border-label({fzf_label})")
 
-    def tag_fzf_preview(self):
+    def fzf_preview(self):
         selected = self.args.tags
         assert len(selected) == 1
         selected = self.fzf_selected_parse(selected[0])
@@ -549,8 +483,8 @@ def main():
                                     "tag",
                                     "grep",
                                     "sync",
-                                    "tag_fzf_reload",
-                                    "tag_fzf_preview",
+                                    "fzf_reload",
+                                    "fzf_preview",
                                 ],
                         help="the action to be perfomed")
     parser.add_argument('-t',
@@ -560,6 +494,9 @@ def main():
                         help="list of tags to perform action on.")
     parser.add_argument('--query',
                         help="this is the fzf query in case of fzf_reload action")
+    parser.add_argument('--undo',
+                        action="store_true",
+                        help="this is for the fzf_reload() to know it is an undo operation")
     parser.add_argument('--color',
                         action="store_true",
                         help="syntax highlight the results")
@@ -581,10 +518,10 @@ def main():
         knowit.sync()
     if args.action == "tag":
         knowit.tag()
-    if args.action == "tag_fzf_preview":
-        knowit.tag_fzf_preview()
-    if args.action == "tag_fzf_reload":
-        knowit.tag_fzf_reload()
+    if args.action == "fzf_preview":
+        knowit.fzf_preview()
+    if args.action == "fzf_reload":
+        knowit.fzf_reload()
 
 
 if __name__=="__main__":
