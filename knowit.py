@@ -255,7 +255,6 @@ class Knowit():
             options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
         return options
 
-
     def browse(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
