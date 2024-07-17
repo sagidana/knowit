@@ -24,6 +24,20 @@ class Note():
         to_str += "".join(self.content)
         return to_str
 
+    def summary(self):
+        timestamp_str = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        to_str = f"[{timestamp_str}]"
+        for tag in self.tags: to_str += f" #{tag}"
+        to_str += "\n"
+        to_str += "\n" + "---" + "\n"
+        MAX_PREVIEW = 40
+        if len(self.content) > MAX_PREVIEW:
+            to_str += self.content[0]
+        else:
+            to_str += "".join(self.content)
+        return to_str
+
+
     def dump(self):
         open(self.path, 'w').write(str(self))
 
@@ -32,7 +46,7 @@ class Note():
         lines = open(path, 'r').readlines()
         assert len(lines) > 3
 
-        m = re.match(r"^\[(?P<date>\d\d\d\d-\d\d\-\d\d\ \d\d:\d\d:\d\d)\]\s+(?P<tags>(\#\w+\s+)*)?$", lines[0])
+        m = re.match(r"^\[(?P<date>\d\d\d\d-\d\d\-\d\d\ \d\d:\d\d:\d\d)\]\s+(?P<tags>(\#[\w\.]+\s+)*)?$", lines[0])
         assert m is not None
 
         assert len(lines[1]) == 1

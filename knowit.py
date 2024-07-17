@@ -464,8 +464,8 @@ class Knowit():
         assert len(selected) == 1
         selected, note_path = self.fzf_selected_parse(selected[0])
         if note_path:
-            content = open(note_path).read()
-            content = bat(content) if self.args.color else content.encode()
+            note = Note.parse(note_path)
+            content = bat(note.summary()) if self.args.color else content.encode()
             stdout.buffer.write(content)
             return
 
@@ -495,8 +495,7 @@ class Knowit():
         for note in relevant_notes:
             if prev_existed: content += "\n---\n\n"
 
-            # content += ''.join(note.content)
-            content += str(note)
+            content += note.summary()
             prev_existed = True
 
         content = bat(content) if self.args.color else content.encode()
