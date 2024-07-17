@@ -279,7 +279,7 @@ class Knowit():
                 if not set(tags).issubset(set(note.tags)): continue
                 locations.append(note.path)
 
-        result = rg_fzf(locations)
+        result = self.rg_fzf(locations)
         if not result: return
 
         file_path = result.split(":")[0]
