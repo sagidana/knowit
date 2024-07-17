@@ -1,5 +1,5 @@
-from subprocess import Popen, PIPE, DEVNULL
 from os import walk, path, environ, remove, isatty, ctermid
+from subprocess import Popen, PIPE, DEVNULL
 from sys import stdin, stdout, stderr
 from datetime import datetime
 from requests import post
@@ -24,18 +24,18 @@ def vim(path, commands=[]):
         _stdin = open(ctermid(), 'rb')
         _stdout = open(ctermid(), 'w')
 
-        env = environ.copy()
         # fzf keeps some of its environment variables, remove them to keep
         # clean operation
-        if "FZF_DEFAULT_COMMAND" in env: del env["FZF_DEFAULT_COMMAND"]
-        if "INITIAL_QUERY" in env: del env["INITIAL_QUERY"]
-        if "FZF_DEFAULT_OPTS" in env: del env["FZF_DEFAULT_OPTS"]
+        if "FZF_DEFAULT_COMMAND" in environ: del environ["FZF_DEFAULT_COMMAND"]
+        if "INITIAL_QUERY" in environ: del environ["INITIAL_QUERY"]
+        if "FZF_DEFAULT_OPTS" in environ: del environ["FZF_DEFAULT_OPTS"]
+        if "FZF_QUERY" in environ: del environ["FZF_QUERY"] # unset fzf context detection
 
         p = Popen(cmd,
                   stdin=_stdin,
                   stdout=_stdout,
                   stderr=_stdout,
-                  env=env)
+                  env=environ)
 
         output, errors = p.communicate()
         return p.returncode
@@ -234,17 +234,32 @@ class Knowit():
 
         remove(vim_script_path)
 
+    def _generate_options(self):
+        selected = self.args.tags
+        options = []
+        tags_map = {}
+        relevant_notes = []
+        for note in self.notes:
+            if not set(selected).issubset(set(note.tags)): continue
+            relevant_notes.append(note)
+            for tag in note.tags:
+                if tag not in tags_map: tags_map[tag] = 0
+                tags_map[tag] += 1
+        # remove already selected tags
+        for tag in selected: del tags_map[tag]
+
+        if len(relevant_notes) > 1:
+            for tag, count in reversed(sorted(tags_map.items(), key=lambda x: x[1])):
+                options.append(f"#{tag} [{count}]")
+        for note in relevant_notes:
+            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        return options
+
+
     def browse(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
-
-        options = []
-        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
-            options.append(f"#{tag} [{count}]")
-
-        for note in self.notes:
-            if not set(selected).issubset(set(note.tags)): continue
-            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        options = self._generate_options()
 
         self.tag_fzf(   options,
                         selected=selected,
@@ -253,15 +268,18 @@ class Knowit():
     def link(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
-        on_enter = "execute(echo {})+abort"
+        # on_enter = "execute(echo {})+abort"
+        on_enter = f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a link -t {{}})"
 
-        options = []
-        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
-            options.append(f"#{tag} [{count}]")
+        # in case we in fzf context, initialize accordingly
+        if "FZF_QUERY" in environ:
+            tags, note_path = self.fzf_selected_parse(selected[0])
+            _stdin = open(ctermid(), 'rb')
+            _stdout = open(ctermid(), 'w')
+            _stdout.write(f"{note_path}\n")
+            return
 
-        for note in self.notes:
-            if not set(selected).issubset(set(note.tags)): continue
-            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        options = self._generate_options()
         self.tag_fzf(options, selected=selected, on_enter=on_enter)
 
     def grep(self):
@@ -304,14 +322,7 @@ class Knowit():
         """view to select tags for newly created note"""
         on_enter = "execute(echo $FZF_BORDER_LABEL)+abort"
         selected = self.args.tags
-
-        options = []
-        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
-            options.append(f"#{tag} [{count}]")
-
-        for note in self.notes:
-            if not set(selected).issubset(set(note.tags)): continue
-            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        options = self._generate_options()
         self.tag_fzf(options, selected=selected, on_enter=on_enter)
 
     def sync(self):
