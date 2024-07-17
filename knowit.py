@@ -43,90 +43,6 @@ def vim(path, commands=[]):
         open('/tmp/knowit.log', 'a+').write(f"traceback: {traceback.format_exc()}")
         # print(f"traceback: {traceback.format_exc()}")
 
-def rg_fzf(locations=["~/notes"]):
-    rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
-    rg_suffix = f" {' '.join(locations)}"
-
-    initial_query = "\"\""
-    cmd = ["fzf"]
-    env = environ.copy()
-    fzf_options = "--ansi "
-    fzf_options += "--delimiter : "
-    fzf_options += "--disabled "
-    fzf_options += f"--query {initial_query} "
-    fzf_options += f"--bind \"change:reload:{rg_prefix} {{q}} {rg_suffix} || true\" "
-    fzf_options += "--bind 'ctrl-k:preview-up' "
-    fzf_options += "--bind 'ctrl-j:preview-down' "
-    fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
-    fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-    fzf_options += "--preview-window 'down,80%,+{2}-/2' "
-    fzf_options += "--preview 'bat --style=auto --color=always -H {2} {1}' "
-
-    env["FZF_DEFAULT_COMMAND"] = f"{rg_prefix} {initial_query} {rg_suffix}"
-    env["INITIAL_QUERY"] = initial_query
-    env["FZF_DEFAULT_OPTS"] = fzf_options
-    p = Popen(cmd,
-              stdin=stdin,
-              stdout=PIPE,
-              stderr=stderr,
-              env=env)
-    output, errors = p.communicate()
-    return output.decode('utf-8').strip()
-
-def tag_fzf(tags,
-            selected,
-            on_enter=f"become(python {path.abspath(__file__)} -a view -t {{}})"):
-    """
-    This is so cool, fzf print out to stderr the fuzzing options,
-    and only the chosen result spit to the stdout.. this enables scripts like
-    this to work out of the box, no redirection of the stderr is need - and
-    only the result is redirected to our pipe (which contain the result)
-    FZF - good job :)
-    NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
-    NOTE: https://github.com/jpe90/clp is needed to be installed!
-    """
-
-    _tags = []
-    for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
-        _tags.append(f"#{tag} [{count}]")
-    tags = _tags
-
-    fzf_options = "--listen 6266 "
-    fzf_options += "--sync "
-    fzf_options += "--layout reverse "
-    fzf_options += "--border rounded "
-    fzf_options += "--border-label-pos 3 "
-    fzf_options += f"--border-label \"{' '.join(selected)}\" "
-    fzf_options += "--bind 'ctrl-z:toggle-preview' "
-    fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} -a create -t {{}})' "
-    fzf_options += "--bind 'ctrl-k:preview-up' "
-    fzf_options += "--bind 'ctrl-j:preview-down' "
-    fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
-    fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-    fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} -a grep -t {{}})' "
-    fzf_options += f"--bind 'esc:reload(python {path.abspath(__file__)} -a fzf_reload --undo -t {{}})+clear-query' "
-    fzf_options += f"--bind 'enter:{on_enter}' "
-    fzf_options += "--bind 'tab:toggle+clear-query' "
-    fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} -a fzf_reload -t {{}})' "
-    fzf_options += "--tiebreak=index "
-    fzf_options += "--preview-window 'down,80%' "
-    fzf_options += f"--preview 'python {path.abspath(__file__)} -a fzf_preview --color -t {{}}'"
-
-    env = environ.copy()
-    env["FZF_DEFAULT_OPTS"] = fzf_options
-    p = Popen(["fzf"],
-              stdin=PIPE,
-              stdout=PIPE,
-              stderr=stderr,
-              env=env)
-    # write the options to stdin before launching the pocess with communicate()
-    p.stdin.write("\n".join(tags).encode())
-
-    output, errors = p.communicate()
-    results = output.decode('utf-8').strip()
-
-    return results.splitlines()
-
 def bat(content):
     """
     Calling 'bat' for syntax highlighting
@@ -151,9 +67,8 @@ def bat(content):
 
 class Knowit():
     def __init__(self, args=None):
-        self.cwd = path.expanduser("~/notes")
-        self.notes = self.parse_notes()
         self.args = args
+        self.notes = self.parse_notes()
 
         new_tags = []
         # remove the '#' if exists
@@ -166,7 +81,7 @@ class Knowit():
 
     def parse_notes(self):
         notes = []
-        for root, dir, files in walk(self.cwd):
+        for root, dir, files in walk(self.args.cwd):
             for f in files:
                 file_path = path.join(root, f)
                 try:
@@ -222,8 +137,8 @@ class Knowit():
 
         tags = list(set(selected))
 
-        while path.exists(path.join(self.cwd, f"{i}.md")): i += 1
-        note_path = path.join(self.cwd, f"{i}.md")
+        while path.exists(path.join(self.args.cwd, f"{i}.md")): i += 1
+        note_path = path.join(self.args.cwd, f"{i}.md")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         content = f"[{timestamp}]{''.join([' #'+tag for tag in tags])}\n\n"
         content += "---" + "\n"
@@ -295,8 +210,8 @@ class Knowit():
             prev_existed = True
 
         i = 0
-        while path.exists(path.join(self.cwd, f"{i}.md")): i += 1
-        file_path = path.join(self.cwd, f"{i}.md")
+        while path.exists(path.join(self.args.cwd, f"{i}.md")): i += 1
+        file_path = path.join(self.args.cwd, f"{i}.md")
 
         vim_script = f"set nopaste\n" # undo the set paste done at the begining
         vim_script += "set foldmethod=manual\n\n"
@@ -324,14 +239,16 @@ class Knowit():
         selected = self.args.tags
         all_tags = self.get_tags()
 
-        tag_fzf(self.get_tags(), selected=selected)
+        self.tag_fzf(   self.get_tags(),
+                        selected=selected,
+                        on_enter=f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a view -t {{}})")
 
     def link(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
         all_tags = self.get_tags()
         on_enter = "execute(echo {})+abort"
-        tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
+        self.tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -356,7 +273,7 @@ class Knowit():
         if fzf_query:
             tags.extend(fzf_selected)
 
-        if not tags: locations.append("~/notes") # search all
+        if not tags: locations.append(self.args.cwd) # search all
         else:
             for note in self.notes:
                 if not set(tags).issubset(set(note.tags)): continue
@@ -373,7 +290,7 @@ class Knowit():
         """view to select tags for newly created note"""
         selected = self.args.tags
         on_enter = "execute(echo $FZF_BORDER_LABEL)+abort"
-        tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
+        self.tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
 
     def sync(self):
         """
@@ -388,6 +305,88 @@ class Knowit():
             print("'view_sync' action need --view-path option to be set.")
             return
         pass
+
+    def rg_fzf(self, locations):
+        rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
+        rg_suffix = f" {' '.join(locations)}"
+
+        initial_query = "\"\""
+        cmd = ["fzf"]
+        env = environ.copy()
+        fzf_options = "--ansi "
+        fzf_options += "--delimiter : "
+        fzf_options += "--disabled "
+        fzf_options += f"--query {initial_query} "
+        fzf_options += f"--bind \"change:reload:{rg_prefix} {{q}} {rg_suffix} || true\" "
+        fzf_options += "--bind 'ctrl-k:preview-up' "
+        fzf_options += "--bind 'ctrl-j:preview-down' "
+        fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
+        fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
+        fzf_options += "--preview-window 'down,80%,+{2}-/2' "
+        fzf_options += "--preview 'bat --style=auto --color=always -H {2} {1}' "
+
+        env["FZF_DEFAULT_COMMAND"] = f"{rg_prefix} {initial_query} {rg_suffix}"
+        env["INITIAL_QUERY"] = initial_query
+        env["FZF_DEFAULT_OPTS"] = fzf_options
+        p = Popen(cmd,
+                  stdin=stdin,
+                  stdout=PIPE,
+                  stderr=stderr,
+                  env=env)
+        output, errors = p.communicate()
+        return output.decode('utf-8').strip()
+
+    def tag_fzf(self, tags, selected, on_enter):
+        """
+        This is so cool, fzf print out to stderr the fuzzing options,
+        and only the chosen result spit to the stdout.. this enables scripts like
+        this to work out of the box, no redirection of the stderr is need - and
+        only the result is redirected to our pipe (which contain the result)
+        FZF - good job :)
+        NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
+        NOTE: https://github.com/jpe90/clp is needed to be installed!
+        """
+
+        _tags = []
+        for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
+            _tags.append(f"#{tag} [{count}]")
+        tags = _tags
+
+        fzf_options = "--listen 6266 "
+        fzf_options += "--sync "
+        fzf_options += "--layout reverse "
+        fzf_options += "--border rounded "
+        fzf_options += "--border-label-pos 3 "
+        fzf_options += f"--border-label \"{' '.join(selected)}\" "
+        fzf_options += "--bind 'ctrl-z:toggle-preview' "
+        fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a create -t {{}})' "
+        fzf_options += "--bind 'ctrl-k:preview-up' "
+        fzf_options += "--bind 'ctrl-j:preview-down' "
+        fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
+        fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
+        fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a grep -t {{}})' "
+        fzf_options += f"--bind 'esc:reload(python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_reload --undo -t {{}})+clear-query' "
+        fzf_options += f"--bind 'enter:{on_enter}' "
+        fzf_options += "--bind 'tab:toggle+clear-query' "
+        fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_reload -t {{}})' "
+        fzf_options += "--tiebreak=index "
+        fzf_options += "--preview-window 'down,80%' "
+        fzf_options += f"--preview 'python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_preview --color -t {{}}'"
+
+        env = environ.copy()
+        env["FZF_DEFAULT_OPTS"] = fzf_options
+        p = Popen(["fzf"],
+                  stdin=PIPE,
+                  stdout=PIPE,
+                  stderr=stderr,
+                  env=env)
+        # write the options to stdin before launching the pocess with communicate()
+        p.stdin.write("\n".join(tags).encode())
+
+        output, errors = p.communicate()
+        results = output.decode('utf-8').strip()
+
+        return results.splitlines()
 
     def fzf_selected_parse(self, selected):
         """
@@ -518,6 +517,10 @@ def main():
                                     "fzf_preview",
                                 ],
                         help="the action to be perfomed")
+
+    parser.add_argument('--cwd',
+                        default=path.expanduser("~/notes"),
+                        help="this is the fzf query in case of fzf_reload action")
     parser.add_argument('-t',
                         '--tags',
                         nargs='+',
