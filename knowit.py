@@ -237,18 +237,32 @@ class Knowit():
     def browse(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
-        all_tags = self.get_tags()
 
-        self.tag_fzf(   self.get_tags(),
+        options = []
+        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
+            options.append(f"#{tag} [{count}]")
+
+        for note in self.notes:
+            if not set(selected).issubset(set(note.tags)): continue
+            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+
+        self.tag_fzf(   options,
                         selected=selected,
                         on_enter=f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a view -t {{}})")
 
     def link(self):
         """view to browse the notes using tags"""
         selected = self.args.tags
-        all_tags = self.get_tags()
         on_enter = "execute(echo {})+abort"
-        self.tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
+
+        options = []
+        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
+            options.append(f"#{tag} [{count}]")
+
+        for note in self.notes:
+            if not set(selected).issubset(set(note.tags)): continue
+            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        self.tag_fzf(options, selected=selected, on_enter=on_enter)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -288,9 +302,17 @@ class Knowit():
 
     def tag(self):
         """view to select tags for newly created note"""
-        selected = self.args.tags
         on_enter = "execute(echo $FZF_BORDER_LABEL)+abort"
-        self.tag_fzf(self.get_tags(), selected=selected, on_enter=on_enter)
+        selected = self.args.tags
+
+        options = []
+        for tag, count in reversed(sorted(self.get_tags().items(), key=lambda x: x[1])):
+            options.append(f"#{tag} [{count}]")
+
+        for note in self.notes:
+            if not set(selected).issubset(set(note.tags)): continue
+            options.append(f"{note.path} ({' '.join([f'#{tag}' for tag in note.tags])})")
+        self.tag_fzf(options, selected=selected, on_enter=on_enter)
 
     def sync(self):
         """
@@ -336,7 +358,7 @@ class Knowit():
         output, errors = p.communicate()
         return output.decode('utf-8').strip()
 
-    def tag_fzf(self, tags, selected, on_enter):
+    def tag_fzf(self, options, selected, on_enter):
         """
         This is so cool, fzf print out to stderr the fuzzing options,
         and only the chosen result spit to the stdout.. this enables scripts like
@@ -346,12 +368,6 @@ class Knowit():
         NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
         NOTE: https://github.com/jpe90/clp is needed to be installed!
         """
-
-        _tags = []
-        for tag, count in reversed(sorted(tags.items(), key=lambda x: x[1])):
-            _tags.append(f"#{tag} [{count}]")
-        tags = _tags
-
         fzf_options = "--listen 6266 "
         fzf_options += "--sync "
         fzf_options += "--layout reverse "
@@ -381,7 +397,7 @@ class Knowit():
                   stderr=stderr,
                   env=env)
         # write the options to stdin before launching the pocess with communicate()
-        p.stdin.write("\n".join(tags).encode())
+        p.stdin.write("\n".join(options).encode())
 
         output, errors = p.communicate()
         results = output.decode('utf-8').strip()
