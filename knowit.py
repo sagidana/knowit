@@ -273,6 +273,7 @@ class Knowit():
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
             tags, note_path = self.fzf_selected_parse(selected[0])
+            if not note_path: return
             _stdin = open(ctermid(), 'rb')
             _stdout = open(ctermid(), 'w')
             _stdout.write(f"{note_path}\n")
