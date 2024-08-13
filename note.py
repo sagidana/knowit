@@ -45,7 +45,7 @@ class Note():
         lines = open(path, 'r').readlines()
         assert len(lines) > 3
 
-        m = re.match(r"^\[(?P<date>\d\d\d\d-\d\d\-\d\d\ \d\d:\d\d:\d\d)\]\s+(?P<tags>(\#[\w\.]+\s+)*)?$", lines[0])
+        m = re.match(r"^\[(?P<date>\d\d\d\d-\d\d\-\d\d\ \d\d:\d\d:\d\d)\]\s+(?P<tags>(\#[\w\-\.]+\s+)*)?$", lines[0])
         assert m is not None
 
         assert len(lines[1]) == 1
