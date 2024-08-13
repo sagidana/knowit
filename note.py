@@ -30,13 +30,12 @@ class Note():
         for tag in self.tags: to_str += f" #{tag}"
         to_str += "\n"
         to_str += "\n" + "---" + "\n"
-        MAX_PREVIEW = 40
+        MAX_PREVIEW = 200
         if len(self.content) > MAX_PREVIEW:
             to_str += self.content[0]
         else:
             to_str += "".join(self.content)
         return to_str
-
 
     def dump(self):
         open(self.path, 'w').write(str(self))
