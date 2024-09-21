@@ -6,6 +6,7 @@ from requests import post
 from time import sleep
 import traceback
 import argparse
+import tempfile
 import re
 
 from note import Note
@@ -228,10 +229,13 @@ class Knowit():
         vim_script_path = "/tmp/knowit.vim"
         open(vim_script_path, "w+").write("".join(vim_script))
 
-        rc = vim(file_path, ["set paste",
-                             f"normal i{''.join(lines)}",
-                             f":source {vim_script_path}"])
+        with tempfile.NamedTemporaryFile() as fp:
+            fp.write(''.join(lines).encode())
+            fp.flush()
 
+            rc = vim(file_path, ["set paste",
+                                 f"normal :read {fp.name} \rggdd",
+                                 f":source {vim_script_path}"])
         remove(vim_script_path)
 
     def _generate_options(self):
