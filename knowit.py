@@ -343,6 +343,7 @@ class Knowit():
                     if path.isfile(link_path):
                         locations.append(link[1])
 
+        locations = list(set(locations)) # remove duplicates
         result = self.rg_fzf(locations)
         if not result: return
 
