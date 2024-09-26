@@ -60,11 +60,10 @@ class Note():
         content = lines[3:]
         links = []
         for line in content:
-            m = re.match(r"^.*\[(?P<from>=>)?(?P<link>\w{10})(?P<to>=>)?\].*$", line)
+            m = re.match(r"^.*\[(?P<name>.*?)\]\((?P<path>.*)\).*$", line)
             if m is None: continue
-            link_id = m.group('link')
-            link_from = m.group('from')
-            link_to = m.group('to')
-            links.append((link_from is not None, link_id, link_to is not None))
+            link_name = m.group('name')
+            link_path = m.group('path')
+            links.append((link_name, link_path))
 
         return Note(path, timestamp, tags, links, content)

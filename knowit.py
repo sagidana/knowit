@@ -338,6 +338,10 @@ class Knowit():
             for note in self.notes:
                 if not set(tags).issubset(set(note.tags)): continue
                 locations.append(note.path)
+                for link in note.links:
+                    link_path = link[1]
+                    if path.isfile(link_path):
+                        locations.append(link[1])
 
         result = self.rg_fzf(locations)
         if not result: return
