@@ -269,22 +269,46 @@ class Knowit():
                         on_enter=f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a view -t {{}})")
 
     def link(self):
-        """view to browse the notes using tags"""
-        selected = self.args.tags
-        # on_enter = "execute(echo {})+abort"
-        on_enter = f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a link -t {{}})"
+        tags = self.args.tags
+        fzf_selected = ""
+        fzf_query = environ.get('FZF_QUERY', "")
+        fzf_label = environ.get('FZF_BORDER_LABEL', "")
 
         # in case we in fzf context, initialize accordingly
         if "FZF_QUERY" in environ:
-            tags, note_path = self.fzf_selected_parse(selected[0])
-            if not note_path: return
-            _stdin = open(ctermid(), 'rb')
-            _stdout = open(ctermid(), 'w')
-            _stdout.write(f"{note_path}\n")
+            assert len(tags) == 1
+            fzf_selected, note_path = self.fzf_selected_parse(tags[0])
+            if note_path:
+                _stdin = open(ctermid(), 'rb')
+                _stdout = open(ctermid(), 'w')
+                _stdout.write(f"{note_path}\n")
+                return
+            tags = []
+
+            if fzf_label:
+                tags = ''.join(fzf_label.split()) # remove all spaces
+                tags = tags.strip().split("#")
+                tags = [x for x in tags if x] # remove empty strings
+
+            tags.extend(fzf_selected)
+            tags = list(set(tags))
+
+            relevant_notes = []
+            for note in self.notes:
+                if not set(tags).issubset(set(note.tags)): continue
+                relevant_notes.append(note)
+
+            # if one note, open directly.
+            if len(relevant_notes) == 1:
+                note_path = relevant_notes[0].path
+                _stdin = open(ctermid(), 'rb')
+                _stdout = open(ctermid(), 'w')
+                _stdout.write(f"{note_path}\n")
             return
 
         options = self._generate_options()
-        self.tag_fzf(options, selected=selected, on_enter=on_enter)
+        on_enter = f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a link -t {{}})"
+        self.tag_fzf(options, selected=tags, on_enter=on_enter)
 
     def grep(self):
         """view to search the notes using grep"""
@@ -490,46 +514,48 @@ class Knowit():
         post("http://localhost:6266/", data=f"change-border-label({fzf_label})")
 
     def fzf_preview(self):
-        selected = self.args.tags
-        assert len(selected) == 1
-        selected, note_path = self.fzf_selected_parse(selected[0])
-        if note_path:
-            note = Note.parse(note_path)
-            content = bat(note.summary()) if self.args.color else content.encode()
+        try:
+            selected = self.args.tags
+            assert len(selected) == 1
+            selected, note_path = self.fzf_selected_parse(selected[0])
+            if note_path:
+                note = Note.parse(note_path)
+                content = bat(note.summary()) if self.args.color else content.encode()
+                stdout.buffer.write(content)
+                return
+
+            fzf_query = environ.get('FZF_QUERY', "")
+            fzf_label = environ.get('FZF_BORDER_LABEL', "")
+
+            tags = []
+            if fzf_label:
+                tags = ''.join(fzf_label.split()) # remove all spaces
+                tags = tags.strip().split("#")
+                tags = [x for x in tags if x] # remove empty strings
+
+            if not fzf_query or selected:
+                tags.extend(selected)
+
+            content = ""
+            prev_existed = False
+            relevant_notes = []
+            relevant_tags = tags.copy()
+            #TODO: use creation time to control order?
+            for note in self.notes:
+                if not set(tags).issubset(set(note.tags)): continue
+                relevant_notes.append(note)
+                relevant_tags.extend(note.tags)
+            relevant_tags = list(set(relevant_tags))
+
+            for note in relevant_notes:
+                if prev_existed: content += "\n---\n\n"
+
+                content += note.summary()
+                prev_existed = True
+
+            content = bat(content) if self.args.color else content.encode()
             stdout.buffer.write(content)
-            return
-
-        fzf_query = environ.get('FZF_QUERY', "")
-        fzf_label = environ.get('FZF_BORDER_LABEL', "")
-
-        tags = []
-        if fzf_label:
-            tags = ''.join(fzf_label.split()) # remove all spaces
-            tags = tags.strip().split("#")
-            tags = [x for x in tags if x] # remove empty strings
-
-        if not fzf_query or selected:
-            tags.extend(selected)
-
-        content = ""
-        prev_existed = False
-        relevant_notes = []
-        relevant_tags = tags.copy()
-        #TODO: use creation time to control order?
-        for note in self.notes:
-            if not set(tags).issubset(set(note.tags)): continue
-            relevant_notes.append(note)
-            relevant_tags.extend(note.tags)
-        relevant_tags = list(set(relevant_tags))
-
-        for note in relevant_notes:
-            if prev_existed: content += "\n---\n\n"
-
-            content += note.summary()
-            prev_existed = True
-
-        content = bat(content) if self.args.color else content.encode()
-        stdout.buffer.write(content)
+        except:pass
 
 
 def main():
