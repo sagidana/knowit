@@ -3,17 +3,31 @@ from subprocess import Popen, PIPE, DEVNULL
 from sys import stdin, stdout, stderr
 from datetime import datetime
 from requests import post
-from time import sleep
 import traceback
 import argparse
 import tempfile
+import sys
 import re
 
-from note import Note
+from knowit.note import Note
+from knowit._paths import FZF_BIN, BAT_BIN
+
+# Command used to re-invoke knowit from within fzf bindings
+_SELF_CMD = f"{sys.executable} -m knowit"
+
+
+def _ensure_tools():
+    """Auto-install managed binaries on first use if missing."""
+    import os
+    if not os.path.isfile(FZF_BIN) or not os.path.isfile(BAT_BIN):
+        from knowit.installer import install
+        install()
+
 
 def log(message):
     with open('/tmp/knowit.log', 'a+') as f:
         f.write(f"{message}\n")
+
 
 def vim(path, commands=[]):
     try:
@@ -42,7 +56,7 @@ def vim(path, commands=[]):
         return p.returncode
     except Exception as e:
         open('/tmp/knowit.log', 'a+').write(f"traceback: {traceback.format_exc()}")
-        # print(f"traceback: {traceback.format_exc()}")
+
 
 def bat(content):
     """
@@ -50,7 +64,7 @@ def bat(content):
     """
     try:
         env = environ.copy()
-        p = Popen(["bat",
+        p = Popen([BAT_BIN,
                    "-l", "md", # markdown language
                    "--style=auto",
                    "--color=always",
@@ -65,6 +79,7 @@ def bat(content):
         return output
 
     except Exception as e: print(f"traceback: {traceback.format_exc()}")
+
 
 class Knowit():
     def __init__(self, args=None):
@@ -89,7 +104,6 @@ class Knowit():
                     note = Note.parse(file_path)
                     notes.append(note)
                 except Exception as e:
-                    # print(f"[!] failed to parse note: {e}")
                     continue
         return notes
 
@@ -107,9 +121,7 @@ class Knowit():
 
         for note in self.notes:
             for link in note.links:
-                # link_from = link[0]
                 link_id = link[1]
-                # link_to = link[2]
                 all_links.append(link_id)
         all_links = list(set(all_links))
         return all_links
@@ -266,7 +278,7 @@ class Knowit():
 
         self.tag_fzf(   options,
                         selected=selected,
-                        on_enter=f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a view -t {{}})")
+                        on_enter=f"become({_SELF_CMD} --cwd {self.args.cwd} -a view -t {{}})")
 
     def link(self):
         tags = self.args.tags
@@ -307,7 +319,7 @@ class Knowit():
             return
 
         options = self._generate_options()
-        on_enter = f"become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a link -t {{}})"
+        on_enter = f"become({_SELF_CMD} --cwd {self.args.cwd} -a link -t {{}})"
         self.tag_fzf(options, selected=tags, on_enter=on_enter)
 
     def grep(self):
@@ -377,7 +389,7 @@ class Knowit():
         rg_suffix = f" {' '.join(locations)}"
 
         initial_query = "\"\""
-        cmd = ["fzf"]
+        cmd = [FZF_BIN]
         env = environ.copy()
         fzf_options = "--ansi "
         fzf_options += "--delimiter : "
@@ -389,7 +401,7 @@ class Knowit():
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
         fzf_options += "--preview-window 'down,80%,+{2}-/2' "
-        fzf_options += "--preview 'bat --style=auto --color=always -H {2} {1}' "
+        fzf_options += f"--preview '{BAT_BIN} --style=auto --color=always -H {{2}} {{1}}' "
 
         env["FZF_DEFAULT_COMMAND"] = f"{rg_prefix} {initial_query} {rg_suffix}"
         env["INITIAL_QUERY"] = initial_query
@@ -419,23 +431,23 @@ class Knowit():
         fzf_options += "--border-label-pos 3 "
         fzf_options += f"--border-label \"{' '.join(selected)}\" "
         fzf_options += "--bind 'ctrl-z:toggle-preview' "
-        fzf_options += f"--bind 'ctrl-t:become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a create -t {{}})' "
+        fzf_options += f"--bind 'ctrl-t:become({_SELF_CMD} --cwd {self.args.cwd} -a create -t {{}})' "
         fzf_options += "--bind 'ctrl-k:preview-up' "
         fzf_options += "--bind 'ctrl-j:preview-down' "
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-        fzf_options += f"--bind 'ctrl-g:become(python {path.abspath(__file__)} --cwd {self.args.cwd} -a grep -t {{}})' "
-        fzf_options += f"--bind 'esc:reload(python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_reload --undo -t {{}})+clear-query' "
+        fzf_options += f"--bind 'ctrl-g:become({_SELF_CMD} --cwd {self.args.cwd} -a grep -t {{}})' "
+        fzf_options += f"--bind 'esc:reload({_SELF_CMD} --cwd {self.args.cwd} -a fzf_reload --undo -t {{}})+clear-query' "
         fzf_options += f"--bind 'enter:{on_enter}' "
         fzf_options += "--bind 'tab:toggle+clear-query' "
-        fzf_options += f"--bind 'tab:+reload(python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_reload -t {{}})' "
+        fzf_options += f"--bind 'tab:+reload({_SELF_CMD} --cwd {self.args.cwd} -a fzf_reload -t {{}})' "
         fzf_options += "--tiebreak=index "
         fzf_options += "--preview-window 'down,80%' "
-        fzf_options += f"--preview 'python {path.abspath(__file__)} --cwd {self.args.cwd} -a fzf_preview --color -t {{}}'"
+        fzf_options += f"--preview '{_SELF_CMD} --cwd {self.args.cwd} -a fzf_preview --color -t {{}}'"
 
         env = environ.copy()
         env["FZF_DEFAULT_OPTS"] = fzf_options
-        p = Popen(["fzf"],
+        p = Popen([FZF_BIN],
                   stdin=PIPE,
                   stdout=PIPE,
                   stderr=stderr,
@@ -525,7 +537,7 @@ class Knowit():
             selected, note_path = self.fzf_selected_parse(selected[0])
             if note_path:
                 note = Note.parse(note_path)
-                content = bat(note.summary()) if self.args.color else content.encode()
+                content = bat(note.summary()) if self.args.color else note.summary().encode()
                 stdout.buffer.write(content)
                 return
 
@@ -545,7 +557,6 @@ class Knowit():
             prev_existed = False
             relevant_notes = []
             relevant_tags = tags.copy()
-            #TODO: use creation time to control order?
             for note in self.notes:
                 if not set(tags).issubset(set(note.tags)): continue
                 relevant_notes.append(note)
@@ -564,6 +575,15 @@ class Knowit():
 
 
 def main():
+    # Handle 'install' subcommand before argparse
+    if len(sys.argv) >= 2 and sys.argv[1] == "install":
+        from knowit.installer import install
+        install()
+        return
+
+    # Auto-install managed binaries on first use
+    _ensure_tools()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-a',
                         '--action',
@@ -622,7 +642,7 @@ def main():
         knowit.fzf_reload()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     try:
         main()
     except:
