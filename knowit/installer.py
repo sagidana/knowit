@@ -14,7 +14,7 @@ from pathlib import Path
 from knowit._paths import BAT_BIN, BIN_DIR, FZF_BIN
 
 # Pinned versions — update here to upgrade bundled tools
-FZF_VERSION = "0.62.0"
+FZF_VERSION = "0.70.0"
 BAT_VERSION = "0.25.0"
 
 
