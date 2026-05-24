@@ -18,6 +18,7 @@ automatic merge or conflict resolution is performed, and deletions are not
 propagated.
 """
 import os
+import difflib
 from os import path, walk
 
 from knowit.note import Note
@@ -169,6 +170,57 @@ async def pull(cwd, vault_name):
             created += 1
 
     return {"created": created, "updated": updated, "skipped": skipped}
+
+
+async def diff(cwd, vault_name):
+    """Compare local notes against the vault. Read-only — touches neither side.
+
+    The vault is treated as the baseline and local as the target, so a unified
+    diff reads as the change `push` would apply. Returns a list of entries, each
+    {"title", "status", "diff"} where status is one of "local_only" (push would
+    create), "vault_only" (pull would create), or "changed". Unchanged notes are
+    omitted, and the list is sorted by title.
+    """
+    from onepassword import ItemCategory
+    client = await _client()
+    vault_id = await _resolve_vault_id(client, vault_name)
+
+    remote = {}
+    for overview in await client.items.list(vault_id):
+        if overview.category != ItemCategory.SECURENOTE:
+            continue
+        item = await client.items.get(vault_id, overview.id)
+        remote[overview.title] = item.notes or ""
+
+    local = {title: raw for title, raw, _tags in _iter_local_notes(cwd)}
+
+    entries = []
+    for title in sorted(set(local) | set(remote)):
+        local_text = local.get(title)
+        vault_text = remote.get(title)
+        if local_text is not None and vault_text is None:
+            status = "local_only"
+            lines = _unified_diff(title, "", local_text)
+        elif local_text is None and vault_text is not None:
+            status = "vault_only"
+            lines = _unified_diff(title, vault_text, "")
+        elif local_text == vault_text:
+            continue
+        else:
+            status = "changed"
+            lines = _unified_diff(title, vault_text, local_text)
+        entries.append({"title": title, "status": status, "diff": lines})
+
+    return entries
+
+
+def _unified_diff(title, vault_text, local_text):
+    return list(difflib.unified_diff(
+        vault_text.splitlines(keepends=True),
+        local_text.splitlines(keepends=True),
+        fromfile=f"vault/{title}",
+        tofile=f"local/{title}",
+    ))
 
 
 def _write_file(dest, raw):

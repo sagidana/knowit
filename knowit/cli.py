@@ -405,6 +405,53 @@ class Knowit():
         print(f"{direction}: {result['created']} created, "
               f"{result['updated']} updated, {result['skipped']} unchanged")
 
+    def diff(self):
+        """show a diff of local notes against the 1Password vault (read-only)"""
+        import asyncio
+        from knowit import onepassword_sync
+
+        try:
+            entries = asyncio.run(
+                onepassword_sync.diff(self.args.cwd, self.args.vault))
+        except Exception as e:
+            print(f"diff failed: {e}")
+            return
+        self._print_diff(entries)
+
+    def _print_diff(self, entries):
+        if not entries:
+            print("no differences — local notes and vault are in sync")
+            return
+
+        use_color = stdout.isatty()
+        labels = {
+            "changed": "differs",
+            "local_only": "only in local (push to add)",
+            "vault_only": "only in vault (pull to add)",
+        }
+        counts = {"changed": 0, "local_only": 0, "vault_only": 0}
+        for entry in entries:
+            counts[entry["status"]] += 1
+            print(f"\n=== {entry['title']} — {labels[entry['status']]} ===")
+            for line in entry["diff"]:
+                print(self._color_diff_line(line.rstrip("\n"), use_color))
+
+        print(f"\nsummary: {counts['changed']} changed, "
+              f"{counts['local_only']} only in local, "
+              f"{counts['vault_only']} only in vault")
+
+    @staticmethod
+    def _color_diff_line(line, use_color):
+        if not use_color:
+            return line
+        if line.startswith("+") and not line.startswith("+++"):
+            return f"\033[32m{line}\033[0m"   # green additions (local)
+        if line.startswith("-") and not line.startswith("---"):
+            return f"\033[31m{line}\033[0m"   # red removals (vault)
+        if line.startswith("@@"):
+            return f"\033[36m{line}\033[0m"   # cyan hunk headers
+        return line
+
     def rg_fzf(self, locations):
         rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
         rg_suffix = f" {' '.join(locations)}"
@@ -602,9 +649,9 @@ def main():
         install()
         return
 
-    # Handle 1Password sync subcommands ('knowit push' / 'knowit pull').
+    # Handle 1Password sync subcommands ('knowit push' / 'pull' / 'diff').
     # These don't use fzf/bat, so skip the managed-tool install.
-    if len(sys.argv) >= 2 and sys.argv[1] in ("push", "pull"):
+    if len(sys.argv) >= 2 and sys.argv[1] in ("push", "pull", "diff"):
         subcommand = sys.argv[1]
         sub = argparse.ArgumentParser(prog=f"knowit {subcommand}")
         sub.add_argument('--cwd',

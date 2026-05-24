@@ -27,6 +27,7 @@ knowit -a link   -t <tag>...  # pick a note path (for use in links)
 knowit -a tag    -t <tag>...  # select tags interactively
 knowit push                   # upload notes to a 1Password vault
 knowit pull                   # download notes from a 1Password vault
+knowit diff                   # show how local notes differ from the vault
 ```
 
 `--cwd <path>` sets the notes directory (default: `~/notes`).
@@ -47,8 +48,13 @@ chmod 600 ~/.config/knowit/.token
 
 knowit push                   # local notes -> vault (create/update items)
 knowit pull                   # vault -> local notes (create/update files)
+knowit diff                   # preview differences (read-only, no changes)
 knowit push --vault MyNotes   # target a vault other than the default "Notes"
 ```
+
+`knowit diff` is read-only and treats the vault as the baseline, so its unified
+diff reads as the change `push` would apply: green `+` lines are local
+additions, red `-` lines are content only in the vault.
 
 The `OP_SERVICE_ACCOUNT_TOKEN` environment variable, if set, takes precedence
 over the token file — useful for runtime injection (e.g. `op run`).
