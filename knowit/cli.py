@@ -278,7 +278,7 @@ class Knowit():
 
         self.tag_fzf(   options,
                         selected=selected,
-                        on_enter=f"become({_SELF_CMD} --cwd {self.args.cwd} -a view -t {{}})")
+                        on_enter=f"execute({_SELF_CMD} --cwd {self.args.cwd} -a view -t {{}})+accept")
 
     def link(self):
         tags = self.args.tags
@@ -319,7 +319,7 @@ class Knowit():
             return
 
         options = self._generate_options()
-        on_enter = f"become({_SELF_CMD} --cwd {self.args.cwd} -a link -t {{}})"
+        on_enter = f"execute({_SELF_CMD} --cwd {self.args.cwd} -a link -t {{}})+accept"
         self.tag_fzf(options, selected=tags, on_enter=on_enter)
 
     def grep(self):
@@ -431,12 +431,12 @@ class Knowit():
         fzf_options += "--border-label-pos 3 "
         fzf_options += f"--border-label \"{' '.join(selected)}\" "
         fzf_options += "--bind 'ctrl-z:toggle-preview' "
-        fzf_options += f"--bind 'ctrl-t:become({_SELF_CMD} --cwd {self.args.cwd} -a create -t {{}})' "
+        fzf_options += f"--bind 'ctrl-t:execute({_SELF_CMD} --cwd {self.args.cwd} -a create -t {{}})+accept' "
         fzf_options += "--bind 'ctrl-k:preview-up' "
         fzf_options += "--bind 'ctrl-j:preview-down' "
         fzf_options += "--bind 'ctrl-u:preview-half-page-up' "
         fzf_options += "--bind 'ctrl-d:preview-half-page-down' "
-        fzf_options += f"--bind 'ctrl-g:become({_SELF_CMD} --cwd {self.args.cwd} -a grep -t {{}})' "
+        fzf_options += f"--bind 'ctrl-g:execute({_SELF_CMD} --cwd {self.args.cwd} -a grep -t {{}})+accept' "
         fzf_options += f"--bind 'esc:reload({_SELF_CMD} --cwd {self.args.cwd} -a fzf_reload --undo -t {{}})+clear-query' "
         fzf_options += f"--bind 'enter:{on_enter}' "
         fzf_options += "--bind 'tab:toggle+clear-query' "
