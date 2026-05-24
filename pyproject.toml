@@ -6,9 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "knowit"
 version = "0.1.0"
 description = "Tag-based note browser powered by fzf and bat"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "requests",
+    "onepassword-sdk",
 ]
 
 [project.scripts]

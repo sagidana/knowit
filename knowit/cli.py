@@ -384,6 +384,27 @@ class Knowit():
             return
         pass
 
+    def push(self):
+        """upload local notes to the 1Password vault (local -> vault)"""
+        self._op_sync("push")
+
+    def pull(self):
+        """download notes from the 1Password vault (vault -> local)"""
+        self._op_sync("pull")
+
+    def _op_sync(self, direction):
+        import asyncio
+        from knowit import onepassword_sync
+
+        action = getattr(onepassword_sync, direction)
+        try:
+            result = asyncio.run(action(self.args.cwd, self.args.vault))
+        except Exception as e:
+            print(f"{direction} failed: {e}")
+            return
+        print(f"{direction}: {result['created']} created, "
+              f"{result['updated']} updated, {result['skipped']} unchanged")
+
     def rg_fzf(self, locations):
         rg_prefix = "rg -H --column --line-number --no-heading --color=always --smart-case "
         rg_suffix = f" {' '.join(locations)}"
@@ -579,6 +600,23 @@ def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "install":
         from knowit.installer import install
         install()
+        return
+
+    # Handle 1Password sync subcommands ('knowit push' / 'knowit pull').
+    # These don't use fzf/bat, so skip the managed-tool install.
+    if len(sys.argv) >= 2 and sys.argv[1] in ("push", "pull"):
+        subcommand = sys.argv[1]
+        sub = argparse.ArgumentParser(prog=f"knowit {subcommand}")
+        sub.add_argument('--cwd',
+                         default=path.expanduser("~/notes"),
+                         help="the notes directory (default: ~/notes)")
+        sub.add_argument('--vault',
+                         default="Notes",
+                         help="1Password vault to sync with (default: Notes)")
+        sub_args = sub.parse_args(sys.argv[2:])
+        sub_args.tags = []
+        knowit = Knowit(sub_args)
+        getattr(knowit, subcommand)()
         return
 
     # Auto-install managed binaries on first use
