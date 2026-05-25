@@ -492,7 +492,7 @@ class Knowit():
         NOTE: influenced by https://jeskin.net/blog/grep-fzf-clp/
         NOTE: https://github.com/jpe90/clp is needed to be installed!
         """
-        fzf_options = "--listen 6266 "
+        fzf_options = "--listen 0 "  # 0 = pick a free port, exposed to children as $FZF_PORT
         fzf_options += "--sync "
         fzf_options += "--layout reverse "
         fzf_options += "--border rounded "
@@ -595,8 +595,10 @@ class Knowit():
 
         fzf_label = " ".join([f"#{tag}" for tag in tags])
 
-        # we need to re-select the tags for fzf to continue from where we stopped
-        post("http://localhost:6266/", data=f"change-border-label({fzf_label})")
+        # we need to re-select the tags for fzf to continue from where we stopped.
+        # fzf exposes its actual listen port to child processes via $FZF_PORT.
+        port = environ.get("FZF_PORT", "6266")
+        post(f"http://localhost:{port}/", data=f"change-border-label({fzf_label})")
 
     def fzf_preview(self):
         try:
